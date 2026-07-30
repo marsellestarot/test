@@ -73,8 +73,36 @@
   .footer-note{font-size:11px; color:var(--muted); text-align:center; margin-top:20px; line-height:1.6;}
   a.link{color:var(--accent2);}
 </style>
+  <style>
+    #globalErrorBox{
+      display:none; background:#3a1414; border:1px solid #ff6b6b; color:#ffd7d7;
+      border-radius:10px; padding:12px 14px; margin:0 0 14px; font-size:12.5px;
+      white-space:pre-wrap; line-height:1.5; font-family:ui-monospace,Menlo,Consolas,monospace;
+    }
+  </style>
 </head>
 <body>
+
+  <script>
+    // Captura CUALQUIER error de JS (incluyendo fallos al cargar el script
+    // module de más abajo, por ejemplo si unpkg.com está bloqueado) y lo
+    // muestra en pantalla, para no depender de la consola del navegador.
+    window.addEventListener("error", function(e){
+      var box = document.getElementById("globalErrorBox");
+      if(!box) return;
+      box.style.display = "block";
+      box.textContent += "❌ Error: " + (e.message || e) +
+        (e.filename ? "\n(en " + e.filename + ":" + e.lineno + ")" : "") + "\n\n";
+    });
+    window.addEventListener("unhandledrejection", function(e){
+      var box = document.getElementById("globalErrorBox");
+      if(!box) return;
+      box.style.display = "block";
+      var reason = e.reason && e.reason.message ? e.reason.message : e.reason;
+      box.textContent += "❌ Error (promesa): " + reason + "\n\n";
+    });
+  </script>
+  <div id="globalErrorBox"></div>
 
   <h1>🎬 Video → Audio → Transcripción</h1>
   <p class="sub">Extraé el audio de un video, descargalo en MP3, transcribilo con IA y traducilo al español. Todo se procesa en el propio dispositivo, salvo la transcripción y la traducción que usan la API de xAI (Grok).</p>
@@ -142,10 +170,26 @@
   <p class="footer-note">Hecho para uso con WebIntoApp. Requiere conexión a internet: la primera vez descarga el motor de conversión de audio (~25&nbsp;MB) y luego usa la API de xAI para transcribir/traducir.</p>
 
 <script type="module">
-  import { FFmpeg } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
-  import { fetchFile } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js";
-(function(){
+(async function(){
   "use strict";
+
+  // Los imports se hacen de forma dinámica y envueltos en try/catch para
+  // que, si unpkg.com está bloqueado o falla la red, se vea el error en
+  // pantalla en vez de que la página quede muerta en silencio.
+  let FFmpeg, fetchFile;
+  try{
+    ({ FFmpeg } = await import("https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js"));
+    ({ fetchFile } = await import("https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js"));
+  }catch(e){
+    const box = document.getElementById("globalErrorBox");
+    if(box){
+      box.style.display = "block";
+      box.textContent += "❌ No se pudieron cargar las librerías de ffmpeg.wasm desde unpkg.com.\n" +
+        "Detalle: " + (e && e.message ? e.message : e) + "\n" +
+        "Esto suele significar que unpkg.com está bloqueado en esta red/dispositivo, o no hay conexión a internet.\n\n";
+    }
+    return; // no seguimos si esto falló
+  }
 
   // ---------- Estado ----------
   const state = {
@@ -277,11 +321,9 @@
         state.lastExtractRatio = progress;
       }
     });
-    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
-    const ffmpegPkgURL = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm";
-    const coreURL = await fetchBlobURLWithProgress(`${baseURL}/ffmpeg-core.js`, "text/javascript", "Script del motor", 1, 3, updateEngineUI);
-    const wasmURL = await fetchBlobURLWithProgress(`${baseURL}/ffmpeg-core.wasm`, "application/wasm", "Motor (WASM)", 2, 3, updateEngineUI);
-    const workerURL = await fetchBlobURLWithProgress(`${ffmpegPkgURL}/worker.js`, "text/javascript", "Worker", 3, 3, updateEngineUI);
+    const coreURL = await fetchBlobURLWithProgress("https://marsellestarot.github.io/test/ffmpeg-core.js", "text/javascript", "Script del motor", 1, 3, updateEngineUI);
+    const wasmURL = await fetchBlobURLWithProgress("https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm", "application/wasm", "Motor (WASM)", 2, 3, updateEngineUI);
+    const workerURL = await fetchBlobURLWithProgress("https://marsellestarot.github.io/test/worker.js", "text/javascript", "Worker", 3, 3, updateEngineUI);
     els.engineStatus.textContent = "Iniciando motor...";
     logLine("Descargas OK. Llamando a ffmpeg.load()...");
 
@@ -366,50 +408,4 @@
       console.error(err);
       logLine("❌ Error: " + (err && err.message ? err.message : err));
       els.extractStatus.textContent = "❌ Falló la extracción — mirá el detalle abajo.";
-      alert("No se pudo extraer el audio. Puede ser un problema de memoria (video muy grande) o de formato. Mirá el detalle en el registro.");
-    }finally{
-      clearInterval(extractTimer);
-      els.btnExtract.disabled = false;
-    }
-  });
-
-  els.btnDownloadMp3.addEventListener("click", () => {
-    if(state.audioBlob) downloadBlob(state.audioBlob, state.audioName);
-  });
-
-  // ---------- Paso 3: transcripción (xAI STT) ----------
-  els.btnTranscribe.addEventListener("click", async () => {
-    const apiKey = requireApiKey();
-    if(!apiKey || !state.audioBlob) return;
-    els.btnTranscribe.disabled = true;
-    els.sttWrap.classList.add("show");
-    try{
-      const form = new FormData();
-      form.append("format", "false");
-      form.append("file", state.audioBlob, state.audioName);
-
-      const res = await fetch("https://api.x.ai/v1/stt", {
-        method: "POST",
-        headers: { "Authorization": "Bearer " + apiKey },
-        body: form
-      });
-      if(!res.ok){
-        const t = await res.text().catch(()=>"");
-        throw new Error("HTTP " + res.status + " " + t.slice(0,200));
-      }
-      const result = await res.json();
-      state.transcript = result;
-      state.sourceSegments = buildSegments(result.words || []);
-
-      els.transcriptMeta.innerHTML =
-        `<span class="pill">Idioma: ${result.language || "?"}</span>` +
-        `<span>Duración: <b>${fmtDuration(result.duration)}</b></span>`;
-      els.transcriptText.value = result.text || "";
-      enableCard(els.transcriptCard);
-      els.btnDownloadTxt.disabled = false;
-      els.btnDownloadSrt.disabled = !(state.sourceSegments && state.sourceSegments.length);
-      els.btnTranslate.disabled = false;
-    }catch(err){
-      console.error(err);
-      let msg = "No se pudo transcribir el audio.\n\n" + (err && err.message ? err.message : err);
-      msg += "\n\nSi el error es de red/CORS, puede que api.x.ai esté bloqueando llamadas directas desde el navegador — en ese caso hace falta un pequeño backend intermediario (proxy) para reen
+      alert("No se pudo extraer el audio. Puede ser un problema de memoria (video muy grande) o de formato. Mirá el detalle en el registro."

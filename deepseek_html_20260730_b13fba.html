@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtitulador con traducción y fallback</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f4f6f8; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #1e293b; margin-top: 0; display: flex; align-items: center; gap: 10px; }
+        .badge { font-size: 0.8rem; background: #2563eb; color: white; padding: 4px 12px; border-radius: 20px; }
+        .section { margin: 20px 0; }
+        label { font-weight: 600; display: block; margin: 10px 0 5px; }
+        input[type="file"], select, input[type="text"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; }
+        input[type="text"] { background: #f8fafc; }
+        .row { display: flex; gap: 15px; flex-wrap: wrap; }
+        .row > * { flex: 1; min-width: 200px; }
+        button { padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        #progress { margin: 20px 0; font-weight: 500; color: #1e293b; min-height: 2rem; }
+        #result { display: none; margin-top: 25px; }
+        #srt-output { background: #f1f5f9; padding: 16px; border-radius: 8px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; border: 1px solid #e2e8f0; }
+        .actions { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
+        .actions button { background: #0b8a4b; }
+        .actions button:hover { background: #0a7a40; }
+        .error { color: #b91c1c; background: #fee2e2; padding: 10px; border-radius: 8px; margin-top: 15px; display: none; }
+        .info { color: #075985; background: #e0f2fe; padding: 10px; border-radius: 8px; margin: 10px 0; }
+        .fallback-badge { background: #f59e0b; color: #000; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; }
+        .footer { margin-top: 30px; font-size: 0.85rem; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎬 Subtitulador automático <span class="badge">sin servidor</span></h1>
+    <p>Sube un vídeo o audio. Se extraerá el audio, se transcribirá (con Whisper) y se traducirá al idioma que elijas. <br>
+    <strong>Traducción:</strong> DeepSeek (principal) → LibreTranslate (fallback automático si falla).</p>
+
+    <div class="info">
+        ⚠️ Necesitas <strong>clave de OpenAI</strong> para la transcripción (Whisper) y <strong>clave de DeepSeek</strong> para la traducción (opcional, si no pones, solo usará LibreTranslate para traducción). 
+        Las claves se guardan solo en tu navegador, no se envían a ningún lado.
+    </div>
+
+    <form id="upload-form">
+        <div class="section">
+            <label for="file-input">📂 Archivo (vídeo o audio)</label>
+            <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv,.webm,.mp3,.wav,.m4a,.flac" required>
+        </div>
+
+        <div class="row">
+            <div class="section">
+                <label for="openai-key">🔑 Clave OpenAI (Whisper) <small style="font-weight:normal;">(obligatoria)</small></label>
+                <input type="text" id="openai-key" placeholder="sk-...">
+            </div>
+            <div class="section">
+                <label for="deepseek-key">🔑 Clave DeepSeek <small style="font-weight:normal;">(opcional, si falla usa LibreTranslate)</small></label>
+                <input type="text" id="deepseek-key" placeholder="sk-... (deja vacío para solo LibreTranslate)">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="section">
+                <label for="target-lang">🌐 Idioma destino</label>
+                <select id="target-lang">
+                    <option value="es">Español</option>
+                    <option value="en">Inglés</option>
+                    <option value="fr">Francés</option>
+                    <option value="pt">Portugués</option>
+                    <option value="de">Alemán</option>
+                    <option value="it">Italiano</option>
+                </select>
+            </div>
+            <div class="section" style="align-self: flex-end;">
+                <button type="submit" id="process-btn">🚀 Procesar</button>
+            </div>
+        </div>
+    </form>
+
+    <div id="progress">⏳ Esperando archivo...</div>
+    <div id="error" class="error"></div>
+
+    <div id="result">
+        <h3>📄 Subtítulos traducidos (formato SRT)</h3>
+        <div id="srt-output"></div>
+        <div class="actions">
+            <button id="copy-btn">📋 Copiar al portapapeles</button>
+            <button id="download-btn">⬇️ Descargar .srt</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        ⚡ Transcripción con OpenAI Whisper · Traducción con DeepSeek + Fallback LibreTranslate · Todo en el navegador
+    </div>
+</div>
+
+<!-- Carga de librerías externas -->
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"></script>
+
+<script>
+// ============================
+// CONFIGURACIÓN
+// ============================
+const WHISPER_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const LIBRETRANSLATE_URL = 'https://libretranslate.com/translate';
+
+// Estado
+let ffmpeg = null;
+let isProcessing = false;
+
+// ============================
+// INICIALIZAR FFMPEG (carga el núcleo)
+// ============================
+async function loadFFmpeg() {
+    if (ffmpeg) return;
+    try {
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        ffmpeg = createFFmpeg({ log: true, corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js' });
+        await ffmpeg.load();
+        console.log('FFmpeg listo');
+    } catch (e) {
+        throw new Error('No se pudo cargar FFmpeg: ' + e.message);
+    }
+}
+
+// ============================
+// EXTRAER AUDIO CON FFMPEG
+// ============================
+async function extractAudio(file) {
+    const inputName = 'input.' + file.name.split('.').pop();
+    const outputName = 'audio.mp3';
+
+    // Escribir archivo en memoria de FFmpeg
+    const data = await file.arrayBuffer();
+    ffmpeg.FS('writeFile', inputName, new Uint8Array(data));
+
+    // Extraer audio a MP3
+    await ffmpeg.run('-i', inputName, '-q:a', '0', '-map', 'a', outputName, '-y');
+
+    // Leer el archivo de salida
+    const outData = ffmpeg.FS('readFile', outputName);
+    const blob = new Blob([outData.buffer], { type: 'audio/mp3' });
+
+    // Limpiar archivos temporales
+    ffmpeg.FS('unlink', inputName);
+    ffmpeg.FS('unlink', outputName);
+
+    return blob;
+}
+
+// ============================
+// TRANSCRIBIR CON WHISPER API
+// ============================
+async function transcribeWithWhisper(audioBlob, apiKey) {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.mp3');
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'srt');  // Devuelve SRT con tiempos
+
+    const response = await fetch(WHISPER_API_URL, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: formData
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Whisper API error (${response.status}): ${errText}`);
+    }
+
+    const srtText = await response.text();
+    return srtText;
+}
+
+// ============================
+// PARSEAR SRT A BLOQUES
+// ============================
+function parseSRT(srtText) {
+    const blocks = [];
+    const entries = srtText.trim().split(/\n\s*\n/);
+    for (const entry of entries) {
+        const lines = entry.split('\n');
+        if (lines.length < 3) continue;
+        const idx = parseInt(lines[0].trim());
+        const timecode = lines[1].trim();
+        const text = lines.slice(2).join(' ').trim();
+        blocks.push({ idx, timecode, text });
+    }
+    return blocks;
+}
+
+// ============================
+// TRADUCTORES (frontend)
+// ============================
+async function translateWithDeepSeek(text, targetLang, apiKey) {
+    const payload = {
+        model: 'deepseek-chat',
+        messages: [
+            { role: 'system', content: `Traduce el siguiente texto al ${targetLang}. Devuelve solo la traducción, sin explicaciones ni comillas.` },
+            { role: 'user', content: text }
+        ],
+        temperature: 0.3,
+        max_tokens: 1024
+    };
+
+    const response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`DeepSeek error (${response.status}): ${err.error?.message || 'desconocido'}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+}
+
+async function translateWithLibreTranslate(text, targetLang) {
+    const response = await fetch(LIBRETRANSLATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            q: text,
+            source: 'auto',
+            target: targetLang,
+            format: 'text'
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`LibreTranslate error (${response.status})`);
+    }
+    const data = await response.json();
+    return data.translatedText.trim();
+}
+
+// ============================
+// ORQUESTADOR DE TRADUCCIÓN CON FALLBACK
+// ============================
+async function translateWithFallback(text, targetLang, deepseekKey) {
+    // Si no hay clave DeepSeek, vamos directo a LibreTranslate
+    if (!deepseekKey) {
+        console.log('Sin clave DeepSeek, usando LibreTranslate directamente');
+        return await translateWithLibreTranslate(text, targetLang);
+    }
+
+    // Intentar DeepSeek (con reintentos simples)
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            return await translateWithDeepSeek(text, targetLang, deepseekKey);
+        } catch (e) {
+            console.warn(`Intento ${attempt+1} DeepSeek falló:`, e.message);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    // Fallback a LibreTranslate
+    console.log('Usando fallback: LibreTranslate');
+    try {
+        return await translateWithLibreTranslate(text, targetLang);
+    } catch (e) {
+        console.error('LibreTranslate también falló:', e.message);
+        return text; // Devuelve original si todo falla
+    }
+}
+
+// ============================
+// PROCESAR ARCHIVO COMPLETO
+// ============================
+async function processFile(file, openaiKey, deepseekKey, targetLang) {
+    const progress = document.getElementById('progress');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+    const srtOutput = document.getElementById('srt-output');
+
+    try {
+        // 1. Cargar FFmpeg
+        progress.textContent = '⏳ Cargando FFmpeg (primera vez puede tardar)...';
+        await loadFFmpeg();
+
+        // 2. Extraer audio
+        progress.textContent = '🎵 Extrayendo audio del archivo...';
+        const audioBlob = await extractAudio(file);
+
+        // 3. Transcribir con Whisper
+        progress.textContent = '📝 Transcribiendo con Whisper (puede tomar varios segundos)...';
+        const srtText = await transcribeWithWhisper(audioBlob, openaiKey);
+        const blocks = parseSRT(srtText);
+        if (blocks.length === 0) throw new Error('No se obtuvo ninguna transcripción');
+
+        // 4. Traducir cada bloque
+        progress.textContent = `🌐 Traduciendo ${blocks.length} bloques... (usando DeepSeek + fallback)`;
+        const translatedBlocks = [];
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            if (block.text.trim() === '') {
+                translatedBlocks.push({ ...block, text: '' });
+                continue;
+            }
+            const translatedText = await translateWithFallback(block.text, targetLang, deepseekKey);
+            translatedBlocks.push({ idx: block.idx, timecode: block.timecode, text: translatedText });
+            // Pequeña pausa para no saturar APIs
+            if (i % 5 === 0) await new Promise(r => setTimeout(r, 300));
+        }
+
+        // 5. Generar SRT final
+        let finalSRT = '';
+        for (const b of translatedBlocks) {
+            finalSRT += `${b.idx}\n${b.timecode}\n${b.text}\n\n`;
+        }
+
+        // 6. Mostrar resultado
+        srtOutput.textContent = finalSRT;
+        resultDiv.style.display = 'block';
+        progress.textContent = '✅ ¡Procesado con éxito!';
+        errorDiv.style.display = 'none';
+
+        // Guardar el SRT para descarga
+        window._srtContent = finalSRT;
+
+    } catch (err) {
+        errorDiv.textContent = '❌ Error: ' + err.message;
+        errorDiv.style.display = 'block';
+        progress.textContent = '⚠️ Fallo en el proceso';
+        resultDiv.style.display = 'none';
+    } finally {
+        isProcessing = false;
+        document.getElementById('process-btn').disabled = false;
+    }
+}
+
+// ============================
+// EVENTOS UI
+// ============================
+document.getElementById('upload-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (isProcessing) return;
+
+    const fileInput = document.getElementById('file-input');
+    const openaiKey = document.getElementById('openai-key').value.trim();
+    const deepseekKey = document.getElementById('deepseek-key').value.trim();
+    const targetLang = document.getElementById('target-lang').value;
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Selecciona un archivo');
+        return;
+    }
+    if (!openaiKey) {
+        alert('La clave de OpenAI es obligatoria para la transcripción.');
+        return;
+    }
+
+    isProcessing = true;
+    document.getElementById('process-btn').disabled = true;
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('result').style.display = 'none';
+
+    await processFile(fileInput.files[0], openaiKey, deepseekKey, targetLang);
+});
+
+// Copiar al portapapeles
+document.getElementById('copy-btn').addEventListener('click', function() {
+    const text = document.getElementById('srt-output').textContent;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('¡Subtítulos copiados!');
+    }).catch(() => {
+        alert('Error al copiar. Selecciona el texto manualmente.');
+    });
+});
+
+// Descargar .srt
+document.getElementById('download-btn').addEventListener('click', function() {
+    const content = window._srtContent;
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'subtitulos_traducidos.srt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

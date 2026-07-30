@@ -257,12 +257,14 @@
   els.videoInput.addEventListener("change", () => {
     const f = els.videoInput.files[0];
     if(!f) return;
+    alert("Evento change OK");
     state.videoFile = f;
     let info = `<span class="pill">${f.name}</span><span><b>${fmtBytes(f.size)}</b></span>`;
     els.fileInfo.innerHTML = info;
     if(f.size > MAX_BYTES){
       els.fileInfo.innerHTML += `<div class="hint warn">⚠️ El archivo supera los 500 MB. Puede fallar por memoria del dispositivo.</div>`;
     }
+    alert("Voy a habilitar el botón");
     els.btnExtract.disabled = false;
   });
 
@@ -408,4 +410,4 @@
       console.error(err);
       logLine("❌ Error: " + (err && err.message ? err.message : err));
       els.extractStatus.textContent = "❌ Falló la extracción — mirá el detalle abajo.";
-      alert("No se pudo extraer el audio. Puede ser un problema de memoria (video muy grande) o de formato. Mirá el detalle en el registro."
+      alert("No se pudo extraer el audio. Puede ser un problema de mem

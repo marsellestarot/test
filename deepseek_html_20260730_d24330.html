@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtitulador con Groq + Gemini</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f1f5f9; }
+        .container { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+        h1 { color: #0f172a; display: flex; align-items: center; gap: 12px; margin-top: 0; }
+        .badge { background: #3b82f6; color: white; padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; }
+        .info-box { background: #e0f2fe; padding: 12px 18px; border-radius: 10px; color: #0369a1; margin: 15px 0; }
+        .info-box strong { color: #0c4a6e; }
+        label { font-weight: 600; display: block; margin: 18px 0 6px; }
+        input[type="file"] { width: 100%; padding: 12px; border: 2px dashed #94a3b8; border-radius: 12px; background: #f8fafc; cursor: pointer; }
+        input[type="file"]:hover { border-color: #3b82f6; background: #f1f5f9; }
+        select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 1rem; background: white; }
+        .row { display: flex; gap: 20px; flex-wrap: wrap; margin: 10px 0; }
+        .row > * { flex: 1; min-width: 200px; }
+        button { padding: 14px 28px; background: #2563eb; color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+        button:hover:not(:disabled) { background: #1d4ed8; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        #progress { margin: 20px 0; font-weight: 500; color: #1e293b; min-height: 2.4rem; background: #f1f5f9; padding: 10px 16px; border-radius: 10px; }
+        #result { display: none; margin-top: 25px; }
+        #srt-output { background: #f8fafc; padding: 18px; border-radius: 12px; max-height: 450px; overflow-y: auto; white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; border: 1px solid #e2e8f0; line-height: 1.5; }
+        .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+        .actions button { background: #0b8a4b; padding: 12px 24px; }
+        .actions button:hover { background: #0a7a40; }
+        .error { color: #b91c1c; background: #fee2e2; padding: 12px 18px; border-radius: 10px; margin-top: 15px; display: none; }
+        .fallback-box { background: #fef3c7; padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #f59e0b; display: none; }
+        .fallback-box input { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; margin: 8px 0; }
+        .fallback-box button { background: #f59e0b; padding: 8px 16px; font-size: 0.95rem; }
+        .footer { margin-top: 30px; font-size: 0.85rem; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 18px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎙️ Subtitulador automático <span class="badge">con fallback</span></h1>
+    <p>Sube un vídeo o audio. Extraemos el audio, lo transcribimos (Groq Whisper) y traducimos cada bloque (Gemini). <br>
+    <strong>Fallback:</strong> si Gemini falla por límite, puedes ingresar otra clave o usamos LibreTranslate.</p>
+
+    <div class="info-box">
+        ✅ <strong>Claves preconfiguradas:</strong> Groq (transcripción) y Gemini (traducción) – no necesitas introducir nada.
+        Si alguna falla por cuota, te avisaremos y podrás cambiarla.
+    </div>
+
+    <form id="upload-form">
+        <div class="section">
+            <label for="file-input">📂 Archivo (video o audio)</label>
+            <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv,.webm,.mp3,.wav,.m4a,.flac,.ogg" required>
+        </div>
+        <div class="row">
+            <div class="section">
+                <label for="target-lang">🌐 Idioma destino</label>
+                <select id="target-lang">
+                    <option value="es">Español</option>
+                    <option value="en">Inglés</option>
+                    <option value="fr">Francés</option>
+                    <option value="pt">Portugués</option>
+                    <option value="de">Alemán</option>
+                    <option value="it">Italiano</option>
+                </select>
+            </div>
+            <div class="section" style="align-self: flex-end;">
+                <button type="submit" id="process-btn">🚀 Procesar</button>
+            </div>
+        </div>
+    </form>
+
+    <div id="progress">⏳ Esperando archivo...</div>
+    <div id="error" class="error"></div>
+    <div id="fallback-box" class="fallback-box">
+        <strong>⚠️ Límite de Gemini alcanzado</strong>
+        <p>Introduce una nueva clave de Gemini (o usa LibreTranslate gratis):</p>
+        <input type="text" id="new-gemini-key" placeholder="AIza... (nueva clave)">
+        <button id="retry-gemini-btn">🔄 Reintentar con nueva clave</button>
+        <button id="use-libretranslate-btn">🌐 Usar LibreTranslate (sin clave)</button>
+    </div>
+
+    <div id="result">
+        <h3>📄 Subtítulos traducidos (SRT)</h3>
+        <div id="srt-output"></div>
+        <div class="actions">
+            <button id="copy-btn">📋 Copiar</button>
+            <button id="download-btn">⬇️ Descargar .srt</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        ⚡ Transcripción: Groq Whisper · Traducción: Gemini (fallback: LibreTranslate) · Todo en el navegador
+    </div>
+</div>
+
+<script>
+// ============================================================
+//  CLAVES PREDEFINIDAS (incrustadas en el código)
+// ============================================================
+const GROQ_API_KEY = "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";
+let GEMINI_API_KEY = "AQ.Ab8RN6IGEoKGTTt-FB4lJvP51sjrwgRoq8yMbRfVOq1Q7aRfRw"; // se puede actualizar
+
+// ============================================================
+//  CONSTANTES DE API
+// ============================================================
+const GROQ_WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+const LIBRETRANSLATE_URL = "https://libretranslate.com/translate";
+
+// ============================================================
+//  ESTADO
+// ============================================================
+let isProcessing = false;
+let currentSRT = "";
+
+// ============================================================
+//  FUNCIONES DE AUDIO (sin FFmpeg)
+// ============================================================
+function floatTo16BitPCM(float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    for (let i = 0; i < float32Array.length; i++) {
+        let s = Math.max(-1, Math.min(1, float32Array[i]));
+        view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buffer;
+}
+
+function createWavBlob(audioBuffer) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length * numChannels * 2; // 16-bit
+    const buffer = new ArrayBuffer(44 + length);
+    const view = new DataView(buffer);
+
+    // Cabecera WAV
+    view.setUint32(0, 0x46464952, true); // "RIFF"
+    view.setUint32(4, 36 + length, true);
+    view.setUint32(8, 0x45564157, true); // "WAVE"
+    view.setUint32(12, 0x20746d66, true); // "fmt "
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    view.setUint32(36, 0x61746164, true); // "data"
+    view.setUint32(40, length, true);
+
+    let offset = 44;
+    for (let channel = 0; channel < numChannels; channel++) {
+        const channelData = audioBuffer.getChannelData(channel);
+        for (let i = 0; i < channelData.length; i++) {
+            const sample = Math.max(-1, Math.min(1, channelData[i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+    return new Blob([buffer], { type: 'audio/wav' });
+}
+
+async function extractAudioFromFile(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        return audioBuffer;
+    } catch (e) {
+        throw new Error("No se pudo decodificar el audio. Asegúrate de que el archivo contenga una pista de audio válida.");
+    }
+}
+
+// ============================================================
+//  TRANSCRIPCIÓN CON GROQ WHISPER
+// ============================================================
+async function transcribeWithGroq(audioBlob) {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.wav');
+    formData.append('model', 'whisper-large-v3');
+    formData.append('response_format', 'srt');
+    formData.append('language', 'es'); // Forzamos español para mejor precisión (opcional)
+
+    const response = await fetch(GROQ_WHISPER_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+        },
+        body: formData
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Groq Whisper error (${response.status}): ${errText}`);
+    }
+    return await response.text();
+}
+
+// ============================================================
+//  PARSEO DE SRT
+// ============================================================
+function parseSRT(srtText) {
+    const blocks = [];
+    const entries = srtText.trim().split(/\n\s*\n/);
+    for (const entry of entries) {
+        const lines = entry.split('\n');
+        if (lines.length < 3) continue;
+        const idx = parseInt(lines[0].trim());
+        const timecode = lines[1].trim();
+        const text = lines.slice(2).join(' ').trim();
+        blocks.push({ idx, timecode, text });
+    }
+    return blocks;
+}
+
+// ============================================================
+//  TRADUCCIÓN CON GEMINI
+// ============================================================
+async function translateWithGemini(text, targetLang, apiKey) {
+    const prompt = `Traduce el siguiente texto al idioma "${targetLang}". Devuelve solo la traducción, sin explicaciones ni comillas:\n\n${text}`;
+    const url = `${GEMINI_URL}?key=${apiKey}`;
+    const payload = {
+        contents: [
+            { parts: [{ text: prompt }] }
+        ]
+    };
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        let errMsg = `Gemini error (${response.status})`;
+        try {
+            const errData = await response.json();
+            if (errData.error && errData.error.message) errMsg += `: ${errData.error.message}`;
+        } catch (e) {}
+        throw new Error(errMsg);
+    }
+    const data = await response.json();
+    const textPart = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textPart) throw new Error("Respuesta de Gemini sin texto");
+    return textPart.trim();
+}
+
+// ============================================================
+//  TRADUCCIÓN CON LIBRETRANSLATE (FALLBACK)
+// ============================================================
+async function translateWithLibreTranslate(text, targetLang) {
+    const response = await fetch(LIBRETRANSLATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            q: text,
+            source: 'auto',
+            target: targetLang,
+            format: 'text'
+        })
+    });
+    if (!response.ok) {
+        throw new Error(`LibreTranslate error (${response.status})`);
+    }
+    const data = await response.json();
+    return data.translatedText.trim();
+}
+
+// ============================================================
+//  ORQUESTADOR DE TRADUCCIÓN CON FALLBACK
+// ============================================================
+async function translateWithFallback(text, targetLang, geminiKey) {
+    // Intentar Gemini
+    try {
+        return await translateWithGemini(text, targetLang, geminiKey);
+    } catch (e) {
+        console.warn("Gemini falló:", e.message);
+        // Si es error de cuota (código 429 o mensaje de cuota), mostramos la caja de fallback
+        const isQuota = e.message.includes('429') || e.message.toLowerCase().includes('quota') || e.message.toLowerCase().includes('limit');
+        if (isQuota) {
+            document.getElementById('fallback-box').style.display = 'block';
+            document.getElementById('progress').textContent = '⚠️ Límite de Gemini alcanzado. Introduce nueva clave o usa LibreTranslate.';
+            throw new Error('QUOTA_EXCEEDED');
+        }
+        // Otro error: intentamos LibreTranslate
+        console.log("Intentando LibreTranslate como fallback...");
+        return await translateWithLibreTranslate(text, targetLang);
+    }
+}
+
+// ============================================================
+//  PROCESO PRINCIPAL
+// ============================================================
+async function processFile(file, targetLang) {
+    const progress = document.getElementById('progress');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+    const srtOutput = document.getElementById('srt-output');
+    const fallbackBox = document.getElementById('fallback-box');
+
+    try {
+        // Ocultar fallback si estaba visible
+        fallbackBox.style.display = 'none';
+        errorDiv.style.display = 'none';
+
+        // 1. Extraer audio con Web Audio
+        progress.textContent = '🎵 Extrayendo audio del archivo...';
+        const audioBuffer = await extractAudioFromFile(file);
+        const wavBlob = createWavBlob(audioBuffer);
+
+        // 2. Transcribir con Groq Whisper
+        progress.textContent = '📝 Transcribiendo con Groq Whisper (puede tomar varios segundos)...';
+        const srtText = await transcribeWithGroq(wavBlob);
+        const blocks = parseSRT(srtText);
+        if (blocks.length === 0) throw new Error('No se obtuvo ninguna transcripción');
+
+        // 3. Traducir cada bloque con Gemini (con fallback)
+        progress.textContent = `🌐 Traduciendo ${blocks.length} bloques... (Gemini + fallback)`;
+        const translatedBlocks = [];
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            if (block.text.trim() === '') {
+                translatedBlocks.push({ ...block, text: '' });
+                continue;
+            }
+            let translatedText;
+            try {
+                translatedText = await translateWithFallback(block.text, targetLang, GEMINI_API_KEY);
+            } catch (err) {
+                if (err.message === 'QUOTA_EXCEEDED') {
+                    // Mostramos la caja de fallback y pausamos
+                    throw err; // lo manejamos arriba
+                }
+                // Si falla LibreTranslate también, usamos el texto original
+                translatedText = block.text;
+            }
+            translatedBlocks.push({ idx: block.idx, timecode: block.timecode, text: translatedText });
+            // Pausa para no saturar
+            if (i % 3 === 0) await new Promise(r => setTimeout(r, 200));
+        }
+
+        // 4. Generar SRT final
+        let finalSRT = '';
+        for (const b of translatedBlocks) {
+            finalSRT += `${b.idx}\n${b.timecode}\n${b.text}\n\n`;
+        }
+        currentSRT = finalSRT;
+
+        // 5. Mostrar resultado
+        srtOutput.textContent = finalSRT;
+        resultDiv.style.display = 'block';
+        progress.textContent = '✅ ¡Procesado con éxito!';
+        errorDiv.style.display = 'none';
+
+    } catch (err) {
+        if (err.message === 'QUOTA_EXCEEDED') {
+            // Ya se mostró la caja de fallback, no mostramos error adicional
+            return;
+        }
+        errorDiv.textContent = '❌ Error: ' + err.message;
+        errorDiv.style.display = 'block';
+        progress.textContent = '⚠️ Fallo en el proceso';
+        resultDiv.style.display = 'none';
+    } finally {
+        isProcessing = false;
+        document.getElementById('process-btn').disabled = false;
+    }
+}
+
+// ============================================================
+//  EVENTOS UI
+// ============================================================
+document.getElementById('upload-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (isProcessing) return;
+
+    const fileInput = document.getElementById('file-input');
+    const targetLang = document.getElementById('target-lang').value;
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Selecciona un archivo');
+        return;
+    }
+
+    isProcessing = true;
+    document.getElementById('process-btn').disabled = true;
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('fallback-box').style.display = 'none';
+
+    await processFile(fileInput.files[0], targetLang);
+});
+
+// Copiar y descargar
+document.getElementById('copy-btn').addEventListener('click', function() {
+    if (!currentSRT) return;
+    navigator.clipboard.writeText(currentSRT).then(() => alert('¡Copiado!')).catch(() => alert('Error al copiar.'));
+});
+
+document.getElementById('download-btn').addEventListener('click', function() {
+    if (!currentSRT) return;
+    const blob = new Blob([currentSRT], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'subtitulos_traducidos.srt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+// Botón para reintentar con nueva clave de Gemini
+document.getElementById('retry-gemini-btn').addEventListener('click', function() {
+    const newKey = document.getElementById('new-gemini-key').value.trim();
+    if (!newKey) {
+        alert('Introduce una clave de Gemini válida.');
+        return;
+    }
+    GEMINI_API_KEY = newKey;
+    document.getElementById('fallback-box').style.display = 'none';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('progress').textContent = '🔄 Reintentando con nueva clave...';
+    // Re-lanzar el proceso (necesitamos el archivo, pero podemos usar el último)
+    const fileInput = document.getElementById('file-input');
+    if (fileInput.files.length > 0) {
+        const targetLang = document.getElementById('target-lang').value;
+        isProcessing = false; // reset
+        document.getElementById('process-btn').disabled = false;
+        // Disparamos de nuevo el submit
+        document.getElementById('upload-form').dispatchEvent(new Event('submit'));
+    } else {
+        alert('Vuelve a seleccionar un archivo.');
+    }
+});
+
+// Botón para usar LibreTranslate directamente
+document.getElementById('use-libretranslate-btn').addEventListener('click', function() {
+    // Forzamos que la traducción use LibreTranslate (pero no podemos cambiar fácilmente el flujo)
+    // Podemos sobrescribir la función translateWithFallback para que solo use LibreTranslate
+    // o mejor, forzamos que la clave de Gemini sea inválida para que vaya a fallback
+    GEMINI_API_KEY = 'INVALID';
+    document.getElementById('fallback-box').style.display = 'none';
+    document.getElementById('progress').textContent = '🌐 Usando LibreTranslate como traductor principal...';
+    const fileInput = document.getElementById('file-input');
+    if (fileInput.files.length > 0) {
+        const targetLang = document.getElementById('target-lang').value;
+        isProcessing = false;
+        document.getElementById('process-btn').disabled = false;
+        document.getElementById('upload-form').dispatchEvent(new Event('submit'));
+    } else {
+        alert('Vuelve a seleccionar un archivo.');
+    }
+});
+</script>
+</body>
+</html>

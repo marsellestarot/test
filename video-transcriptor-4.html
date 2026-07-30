@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Video → Audio → Transcripción</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#171a23; --card2:#1d2130; --border:#2a2f3f;
+    --text:#eef0f6; --muted:#9aa1b5; --accent:#7c5cff; --accent2:#5ce6c8;
+    --danger:#ff6b6b; --ok:#5ce6c8; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    padding:16px 14px 60px; max-width:640px; margin:0 auto;
+  }
+  h1{font-size:19px; margin:6px 0 2px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 18px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px; margin-bottom:14px;
+  }
+  .card h2{font-size:14px; margin:0 0 10px; color:var(--accent2); display:flex; align-items:center; gap:8px;}
+  .badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; border-radius:50%; background:var(--accent);
+    color:#fff; font-size:11px; font-weight:700; flex:none;
+  }
+  label{display:block; font-size:12.5px; color:var(--muted); margin:10px 0 5px;}
+  input[type=text], input[type=password], select, textarea{
+    width:100%; background:var(--card2); border:1px solid var(--border); color:var(--text);
+    padding:10px 11px; border-radius:10px; font-size:14px; outline:none;
+  }
+  input[type=file]{
+    width:100%; background:var(--card2); border:1px dashed var(--border); color:var(--muted);
+    padding:16px 10px; border-radius:10px; font-size:13px;
+  }
+  textarea{min-height:120px; resize:vertical; line-height:1.5; font-size:13.5px;}
+  button{
+    border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:600;
+    cursor:pointer; width:100%; margin-top:10px; transition:opacity .15s;
+  }
+  button.primary{background:var(--accent); color:#fff;}
+  button.secondary{background:var(--card2); color:var(--text); border:1px solid var(--border);}
+  button.ghost{background:transparent; color:var(--accent2); border:1px solid var(--border);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .row{display:flex; gap:8px;}
+  .row > button{margin-top:10px;}
+  .hint{font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.5;}
+  .hint.warn{color:#f4b942;}
+  .progress-wrap{
+    background:var(--card2); border-radius:8px; overflow:hidden; height:8px; margin-top:10px;
+    border:1px solid var(--border); display:none;
+  }
+  .progress-wrap.show{display:block;}
+  .progress-bar{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .2s;}
+  .log{
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--muted);
+    background:#0b0d13; border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+    max-height:110px; overflow-y:auto; margin-top:10px; white-space:pre-wrap; display:none;
+  }
+  .log.show{display:block;}
+  audio{width:100%; margin-top:10px;}
+  .meta{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:8px;}
+  .meta b{color:var(--text);}
+  .pill{
+    display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px;
+    background:var(--card2); border:1px solid var(--border); color:var(--accent2); margin-right:6px;
+  }
+  .disabled-card{opacity:.45; pointer-events:none;}
+  .footer-note{font-size:11px; color:var(--muted); text-align:center; margin-top:20px; line-height:1.6;}
+  a.link{color:var(--accent2);}
+</style>
+</head>
+<body>
+
+  <h1>🎬 Video → Audio → Transcripción</h1>
+  <p class="sub">Extraé el audio de un video, descargalo en MP3, transcribilo con IA y traducilo al español. Todo se procesa en el propio dispositivo, salvo la transcripción y la traducción que usan la API de xAI (Grok).</p>
+
+  <!-- PASO 0: API KEY -->
+  <div class="card">
+    <h2><span class="badge">1</span> Configuración de xAI (Grok)</h2>
+    <label for="apiKey">API Key de xAI</label>
+    <input type="password" id="apiKey" placeholder="xai-..." value="xai-X5UfoSkGBfa1akK6NgQrkTRNw5GjvrnM4qZREDfDsq0gMYRptIDEvzszEzegzUlLMj3jvKAGP1QUJfI2">
+    <label for="chatModel">Modelo para traducción</label>
+    <select id="chatModel">
+      <option value="grok-4.5" selected>grok-4.5</option>
+      <option value="grok-4.3">grok-4.3</option>
+    </select>
+    <p class="hint">La clave se usa solo en este dispositivo, para llamar a <b>api.x.ai</b> directamente desde el navegador. No se guarda ni se envía a ningún otro lado. Se pierde al cerrar la app (podés volver a pegarla la próxima vez).</p>
+  </div>
+
+  <!-- PASO 1: CARGAR VIDEO -->
+  <div class="card">
+    <h2><span class="badge">2</span> Cargar video</h2>
+    <input type="file" id="videoInput" accept="video/*">
+    <div id="fileInfo" class="meta"></div>
+    <p class="hint">Tamaño máximo recomendado: <b>500 MB</b>. En equipos Android con poca memoria, videos muy largos o pesados pueden fallar al procesarse: si eso pasa, probá con un video más corto o comprimido primero.</p>
+    <div class="progress-wrap" id="engineProgressWrap"><div class="progress-bar" id="engineProgressBar"></div></div>
+    <p class="hint" id="engineStatus" style="display:none;"></p>
+    <div class="progress-wrap" id="extractProgressWrap"><div class="progress-bar" id="extractProgressBar"></div></div>
+    <p class="hint" id="extractStatus" style="display:none;"></p>
+    <div class="log" id="ffmpegLog"></div>
+    <button class="primary" id="btnExtract" disabled>Extraer audio</button>
+  </div>
+
+  <!-- PASO 2: RESULTADO AUDIO -->
+  <div class="card disabled-card" id="audioCard">
+    <h2><span class="badge">3</span> Audio extraído</h2>
+    <audio id="audioPlayer" controls></audio>
+    <div class="meta" id="audioMeta"></div>
+    <button class="secondary" id="btnDownloadMp3" disabled>⬇️ Descargar MP3</button>
+    <button class="primary" id="btnTranscribe" disabled>🎙️ Transcribir con IA</button>
+    <div class="progress-wrap" id="sttProgressWrap"><div class="progress-bar" id="sttProgressBar" style="width:30%"></div></div>
+  </div>
+
+  <!-- PASO 3: TRANSCRIPCIÓN -->
+  <div class="card disabled-card" id="transcriptCard">
+    <h2><span class="badge">4</span> Transcripción</h2>
+    <div class="meta" id="transcriptMeta"></div>
+    <textarea id="transcriptText" readonly placeholder="Acá va a aparecer el texto transcripto..."></textarea>
+    <div class="row">
+      <button class="secondary" id="btnDownloadTxt" disabled>⬇️ TXT</button>
+      <button class="secondary" id="btnDownloadSrt" disabled>⬇️ SRT</button>
+    </div>
+    <button class="primary" id="btnTranslate" disabled>🌎 Traducir al español</button>
+    <div class="progress-wrap" id="trProgressWrap"><div class="progress-bar" id="trProgressBar" style="width:30%"></div></div>
+  </div>
+
+  <!-- PASO 4: TRADUCCIÓN -->
+  <div class="card disabled-card" id="translationCard">
+    <h2><span class="badge">5</span> Traducción al español</h2>
+    <textarea id="translationText" readonly placeholder="Acá va a aparecer la traducción..."></textarea>
+    <div class="row">
+      <button class="secondary" id="btnDownloadTxtEs" disabled>⬇️ TXT (ES)</button>
+      <button class="secondary" id="btnDownloadSrtEs" disabled>⬇️ SRT (ES)</button>
+    </div>
+  </div>
+
+  <p class="footer-note">Hecho para uso con WebIntoApp. Requiere conexión a internet: la primera vez descarga el motor de conversión de audio (~25&nbsp;MB) y luego usa la API de xAI para transcribir/traducir.</p>
+
+<script type="module">
+  import { FFmpeg } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+  import { fetchFile } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js";
+(function(){
+  "use strict";
+
+  // ---------- Estado ----------
+  const state = {
+    videoFile: null,
+    audioBlob: null,
+    audioName: "audio.mp3",
+    transcript: null,       // { text, language, duration, words }
+    sourceSegments: null,   // [{index,start,end,text}]
+    translatedSegments: null,
+    translatedText: null,
+    ffmpeg: null,
+    ffmpegLoaded: false,
+  };
+
+  // ---------- Helpers de UI ----------
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    apiKey: $("apiKey"), chatModel: $("chatModel"),
+    videoInput: $("videoInput"), fileInfo: $("fileInfo"),
+    btnExtract: $("btnExtract"),
+    engineWrap: $("engineProgressWrap"), engineBar: $("engineProgressBar"), engineStatus: $("engineStatus"),
+    extractWrap: $("extractProgressWrap"), extractBar: $("extractProgressBar"), extractStatus: $("extractStatus"),
+    ffmpegLog: $("ffmpegLog"),
+    audioCard: $("audioCard"), audioPlayer: $("audioPlayer"), audioMeta: $("audioMeta"),
+    btnDownloadMp3: $("btnDownloadMp3"), btnTranscribe: $("btnTranscribe"),
+    sttWrap: $("sttProgressWrap"),
+    transcriptCard: $("transcriptCard"), transcriptMeta: $("transcriptMeta"),
+    transcriptText: $("transcriptText"),
+    btnDownloadTxt: $("btnDownloadTxt"), btnDownloadSrt: $("btnDownloadSrt"),
+    btnTranslate: $("btnTranslate"), trWrap: $("trProgressWrap"),
+    translationCard: $("translationCard"), translationText: $("translationText"),
+    btnDownloadTxtEs: $("btnDownloadTxtEs"), btnDownloadSrtEs: $("btnDownloadSrtEs"),
+  };
+
+  function enableCard(card){ card.classList.remove("disabled-card"); }
+  function logLine(msg){
+    els.ffmpegLog.classList.add("show");
+    els.ffmpegLog.textContent += msg + "\n";
+    els.ffmpegLog.scrollTop = els.ffmpegLog.scrollHeight;
+  }
+  function fmtBytes(b){
+    if(b < 1024*1024) return (b/1024).toFixed(0)+" KB";
+    return (b/(1024*1024)).toFixed(1)+" MB";
+  }
+  function fmtDuration(s){
+    if(!isFinite(s)) return "-";
+    const m = Math.floor(s/60), sec = Math.round(s%60);
+    return m+"m "+sec+"s";
+  }
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+  }
+  function requireApiKey(){
+    const k = els.apiKey.value.trim();
+    if(!k){ alert("Pegá primero tu API Key de xAI en el paso 1."); return null; }
+    return k;
+  }
+
+  // ---------- Paso 2: selección de video ----------
+  const MAX_BYTES = 500 * 1024 * 1024;
+  els.videoInput.addEventListener("change", () => {
+    const f = els.videoInput.files[0];
+    if(!f) return;
+    state.videoFile = f;
+    let info = `<span class="pill">${f.name}</span><span><b>${fmtBytes(f.size)}</b></span>`;
+    els.fileInfo.innerHTML = info;
+    if(f.size > MAX_BYTES){
+      els.fileInfo.innerHTML += `<div class="hint warn">⚠️ El archivo supera los 500 MB. Puede fallar por memoria del dispositivo.</div>`;
+    }
+    els.btnExtract.disabled = false;
+  });
+
+  // ---------- Descarga con progreso real (%, MB, tiempo estimado) ----------
+  function fmtMB(bytes){ return (bytes/(1024*1024)).toFixed(1); }
+  function fmtSecs(s){
+    if(s < 60) return Math.ceil(s)+"s";
+    return Math.floor(s/60)+"m "+Math.round(s%60)+"s";
+  }
+  async function fetchBlobURLWithProgress(url, mimeType, label, stageIdx, stageTotal, onUpdate){
+    const startTime = performance.now();
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("No se pudo descargar " + label + " (HTTP " + res.status + ")");
+    const totalBytes = parseInt(res.headers.get("Content-Length") || "0", 10);
+    if(!res.body || !totalBytes){
+      const buf = await res.arrayBuffer();
+      onUpdate(label, stageIdx, stageTotal, 1, buf.byteLength, buf.byteLength || 1, startTime);
+      return URL.createObjectURL(new Blob([buf], { type: mimeType }));
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0, lastUpdate = 0;
+    while(true){
+      const { done, value } = await reader.read();
+      if(done) break;
+      chunks.push(value);
+      received += value.length;
+      const now = performance.now();
+      if(now - lastUpdate > 150 || received === totalBytes){
+        lastUpdate = now;
+        onUpdate(label, stageIdx, stageTotal, received/totalBytes, received, totalBytes, startTime);
+      }
+    }
+    return URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+  }
+  function updateEngineUI(label, stageIdx, stageTotal, ratio, received, total, startTime){
+    els.engineWrap.classList.add("show");
+    els.engineStatus.style.display = "block";
+    els.engineBar.style.width = Math.round(ratio*100) + "%";
+    const elapsedS = (performance.now() - startTime) / 1000;
+    const speed = received / Math.max(elapsedS, 0.05);
+    const etaS = (total - received) / Math.max(speed, 1);
+    let text = `${label} (${stageIdx}/${stageTotal}) · ${fmtMB(received)} / ${fmtMB(total)} MB · ${Math.round(ratio*100)}%`;
+    if(ratio < 1 && etaS > 0.5) text += ` · ~${fmtSecs(etaS)} restantes`;
+    els.engineStatus.textContent = text;
+  }
+
+  // ---------- ffmpeg.wasm (v0.12, motor single-thread sin SharedArrayBuffer) ----------
+  async function ensureFFmpeg(){
+    if(state.ffmpegLoaded) return state.ffmpeg;
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on("log", ({message}) => logLine(message));
+    ffmpeg.on("progress", ({progress}) => {
+      if(progress >= 0 && progress <= 1){
+        els.extractBar.style.width = Math.round(progress*100)+"%";
+        state.lastExtractRatio = progress;
+      }
+    });
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+    const ffmpegPkgURL = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm";
+    const coreURL = await fetchBlobURLWithProgress(`${baseURL}/ffmpeg-core.js`, "text/javascript", "Script del motor", 1, 3, updateEngineUI);
+    const wasmURL = await fetchBlobURLWithProgress(`${baseURL}/ffmpeg-core.wasm`, "application/wasm", "Motor (WASM)", 2, 3, updateEngineUI);
+    const workerURL = await fetchBlobURLWithProgress(`${ffmpegPkgURL}/worker.js`, "text/javascript", "Worker", 3, 3, updateEngineUI);
+    els.engineStatus.textContent = "Iniciando motor...";
+    await ffmpeg.load({ coreURL, wasmURL, classWorkerURL: workerURL });
+    els.engineStatus.textContent = "✅ Motor cargado";
+    setTimeout(() => { els.engineWrap.classList.remove("show"); els.engineStatus.style.display = "none"; }, 1200);
+    state.ffmpeg = ffmpeg;
+    state.ffmpegLoaded = true;
+    return ffmpeg;
+  }
+
+  els.btnExtract.addEventListener("click", async () => {
+    if(!state.videoFile) return;
+    els.btnExtract.disabled = true;
+    els.extractWrap.classList.add("show");
+    els.extractStatus.style.display = "block";
+    els.extractBar.style.width = "0%";
+    const extractStart = performance.now();
+    state.lastExtractRatio = 0;
+    const extractTimer = setInterval(() => {
+      const elapsedS = (performance.now() - extractStart) / 1000;
+      const ratio = state.lastExtractRatio || 0;
+      let text = `Extrayendo audio · ${Math.round(ratio*100)}% · ${fmtSecs(elapsedS)} transcurridos`;
+      if(ratio > 0.03){
+        const etaS = (elapsedS / ratio) * (1 - ratio);
+        if(etaS > 1) text += ` · ~${fmtSecs(etaS)} restantes`;
+      }
+      els.extractStatus.textContent = text;
+    }, 400);
+    try{
+      const ffmpeg = await ensureFFmpeg();
+      const origName = state.videoFile.name || "input.mp4";
+      const ext = (origName.includes(".") ? origName.split(".").pop() : "mp4").toLowerCase();
+      const inputName = "input." + ext;
+
+      els.extractStatus.textContent = "Leyendo archivo de video...";
+      logLine("Leyendo archivo de video...");
+      await ffmpeg.writeFile(inputName, await fetchFile(state.videoFile));
+
+      logLine("Extrayendo audio a MP3...");
+      await ffmpeg.exec(["-i", inputName, "-vn", "-ar", "44100", "-ac", "2", "-b:a", "128k", "output.mp3"]);
+
+      const data = await ffmpeg.readFile("output.mp3");
+      const audioBlob = new Blob([data.buffer], { type: "audio/mpeg" });
+      state.audioBlob = audioBlob;
+      state.audioName = origName.replace(/\.[^.]+$/, "") + ".mp3";
+
+      // liberar memoria
+      try{ await ffmpeg.deleteFile(inputName); }catch(e){}
+      try{ await ffmpeg.deleteFile("output.mp3"); }catch(e){}
+
+      els.audioPlayer.src = URL.createObjectURL(audioBlob);
+      els.audioMeta.innerHTML = `<span class="pill">${state.audioName}</span><span><b>${fmtBytes(audioBlob.size)}</b></span>`;
+      enableCard(els.audioCard);
+      els.btnDownloadMp3.disabled = false;
+      els.btnTranscribe.disabled = false;
+      els.extractStatus.textContent = `✅ Listo en ${fmtSecs((performance.now()-extractStart)/1000)}`;
+      logLine("✅ Audio extraído correctamente.");
+    }catch(err){
+      console.error(err);
+      logLine("❌ Error: " + (err && err.message ? err.message : err));
+      els.extractStatus.textContent = "❌ Falló la extracción — mirá el detalle abajo.";
+      alert("No se pudo extraer el audio. Puede ser un problema de memoria (video muy grande) o de formato. Mirá el detalle en el registro.");
+    }finally{
+      clearInterval(extractTimer);
+      els.btnExtract.disabled = false;
+    }
+  });
+
+  els.btnDownloadMp3.addEventListener("click", () => {
+    if(state.audioBlob) downloadBlob(state.audioBlob, state.audioName);
+  });
+
+  // ---------- Paso 3: transcripción (xAI STT) ----------
+  els.btnTranscribe.addEventListener("click", async () => {
+    const apiKey = requireApiKey();
+    if(!apiKey || !state.audioBlob) return;
+    els.btnTranscribe.disabled = true;
+    els.sttWrap.classList.add("show");
+    try{
+      const form = new FormData();
+      form.append("format", "false");
+      form.append("file", state.audioBlob, state.audioName);
+
+      const res = await fetch("https://api.x.ai/v1/stt", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + apiKey },
+        body: form
+      });
+      if(!res.ok){
+        const t = await res.text().catch(()=>"");
+        throw new Error("HTTP " + res.status + " " + t.slice(0,200));
+      }
+      const result = await res.json();
+      state.transcript = result;
+      state.sourceSegments = buildSegments(result.words || []);
+
+      els.transcriptMeta.innerHTML =
+        `<span class="pill">Idioma: ${result.language || "?"}</span>` +
+        `<span>Duración: <b>${fmtDuration(result.duration)}</b></span>`;
+      els.transcriptText.value = result.text || "";
+      enableCard(els.transcriptCard);
+      els.btnDownloadTxt.disabled = false;
+      els.btnDownloadSrt.disabled = !(state.sourceSegments && state.sourceSegments.length);
+      els.btnTranslate.disabled = false;
+    }catch(err){
+      console.error(err);
+      let msg = "No se pudo transcribir el audio.\n\n" + (err && err.message ? err.message : err);
+      msg += "\n\nSi el error es de red/CORS, puede que api.x.ai esté bloqueando llamadas directas desde el navegador — en ese caso hace falta un pequeño backend intermediario (proxy) para reenviar la petición.";
+      alert(msg);
+    }finally{
+      els.btnTranscribe.disabled = false;
+      els.sttWrap.classList.remove("show");
+    }
+  });
+
+  els.btnDownloadTxt.addEventListener("click", () => {
+    if(!state.transcript) return;
+    downloadBlob(new Blob([state.transcript.text||""], {type:"text/plain;charset=utf-8"}), "transcripcion.txt");
+  });
+  els.btnDownloadSrt.addEventListener("click", () => {
+    if(!state.sourceSegments) return;
+    downloadBlob(new Blob([generateSRT(state.sourceSegments)], {type:"text/plain;charset=utf-8"}), "transcripcion.srt");
+  });
+
+  // ---------- Segmentación para SRT ----------
+  function buildSegments(words){
+    if(!words || !words.length) return [];
+    const segments = [];
+    const MAX_WORDS = 12, MAX_DUR = 6.0;
+    let current = null;
+    words.forEach(w => {
+      if(!current){
+        current = { words: [w], start: w.start, end: w.end };
+      }else{
+        const dur = w.end - current.start;
+        const lastText = current.words[current.words.length-1].text || "";
+        const endsSentence = /[.!?…]$/.test(lastText.trim());
+        if(current.words.length >= MAX_WORDS || dur > MAX_DUR || endsSentence){
+          segments.push(current);
+          current = { words: [w], start: w.start, end: w.end };
+        }else{
+          current.words.push(w);
+          current.end = w.end;
+        }
+      }
+    });
+    if(current) segments.push(current);
+    return segments.map((s,i) => ({
+      index: i+1, start: s.start, end: s.end,
+      text: s.words.map(x => x.text).join(" ").trim()
+    }));
+  }
+  function srtTimestamp(t){
+    const pad = (n,l) => String(Math.max(0,Math.floor(n))).padStart(l,"0");
+    const h = Math.floor(t/3600);
+    const m = Math.floor((t%3600)/60);
+    const s = Math.floor(t%60);
+    const ms = Math.round((t - Math.floor(t)) * 1000);
+    return `${pad(h,2)}:${pad(m,2)}:${pad(s,2)},${String(ms).padStart(3,"0")}`;
+  }
+  function generateSRT(segments){
+    return segments.map(s =>
+      `${s.index}\n${srtTimestamp(s.start)} --> ${srtTimestamp(s.end)}\n${s.text}\n`
+    ).join("\n");
+  }
+
+  // ---------- Paso 4: traducción con Grok (chat completions) ----------
+  async function chatComplete(apiKey, model, systemMsg, userMsg){
+    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.2
+      })
+    });
+    if(!res.ok){
+      const t = await res.text().catch(()=>"");
+      throw new Error("HTTP " + res.status + " " + t.slice(0,200));
+    }
+    const data = await res.json();
+    return data.choices[0].message.content.trim();
+  }
+  function parseJsonArray(raw){
+    let s = raw.trim();
+    s = s.replace(/^```json/i,"").replace(/^```/,"").replace(/```$/,"").trim();
+    return JSON.parse(s);
+  }
+
+  async function translateSegments(apiKey, model, segments){
+    const batches = [];
+    let batch = [], chars = 0;
+    segments.forEach(seg => {
+      batch.push(seg);
+      chars += seg.text.length;
+      if(batch.length >= 40 || chars > 4000){ batches.push(batch); batch = []; chars = 0; }
+    });
+    if(batch.length) batches.push(batch);
+
+    const out = [];
+    for(let i=0; i<batches.length; i++){
+      const b = batches[i];
+      const texts = b.map(s => s.text);
+      const sys = "Sos un traductor profesional. Traducís cada elemento del array JSON dado al español rioplatense, manteniendo exactamente el mismo orden y la misma cantidad de elementos (uno a uno). Devolvé ÚNICAMENTE un array JSON válido de strings, sin explicaciones, sin comentarios y sin bloques de código markdown.";
+      const content = await chatComplete(apiKey, model, sys, JSON.stringify(texts));
+      let arr;
+      try{ arr = parseJsonArray(content); }
+      catch(e){ throw new Error("La IA no devolvió un JSON válido al traducir los subtítulos."); }
+      arr.forEach((t, j) => out.push({ ...b[j], text: String(t) }));
+      els.trProgressBar.style.width = Math.round(((i+1)/batches.length)*100) + "%";
+    }
+    return out;
+  }
+
+  async function translateFullText(apiKey, model, text){
+    const sys = "Sos un traductor profesional. Traducí el siguiente texto al español rioplatense, de forma natural y fluida, conservando el sentido completo. Devolvé únicamente la traducción, sin comentarios adicionales.";
+    return await chatComplete(apiKey, model, sys, text);
+  }
+
+  els.btnTranslate.addEventListener("click", async () => {
+    const apiKey = requireApiKey();
+    if(!apiKey || !state.transcript) return;
+    const model = els.chatModel.value;
+    els.btnTranslate.disabled = true;
+    els.trWrap.classList.add("show");
+    els.trProgressBar.style.width = "5%";
+    try{
+      const [fullTranslated, segTranslated] = await Promise.all([
+        translateFullText(apiKey, model, state.transcript.text || ""),
+        (state.sourceSegments && state.sourceSegments.length)
+          ? translateSegments(apiKey, model, state.sourceSegments)
+          : Promise.resolve(null)
+      ]);
+      state.translatedText = fullTranslated;
+      state.translatedSegments = segTranslated;
+
+      els.translationText.value = fullTranslated;
+      enableCard(els.translationCard);
+      els.btnDownloadTxtEs.disabled = false;
+      els.btnDownloadSrtEs.disabled = !segTranslated;
+    }catch(err){
+      console.error(err);
+      alert("No se pudo traducir: " + (err && err.message ? err.message : err));
+    }finally{
+      els.btnTranslate.disabled = false;
+      els.trWrap.classList.remove("show");
+    }
+  });
+
+  els.btnDownloadTxtEs.addEventListener("click", () => {
+    if(!state.translatedText) return;
+    downloadBlob(new Blob([state.translatedText], {type:"text/plain;charset=utf-8"}), "traduccion_es.txt");
+  });
+  els.btnDownloadSrtEs.addEventListener("click", () => {
+    if(!state.translatedSegments) return;
+    downloadBlob(new Blob([generateSRT(state.translatedSegments)], {type:"text/plain;charset=utf-8"}), "traduccion_es.srt");
+  });
+
+})();
+</script>
+</body>
+</html>

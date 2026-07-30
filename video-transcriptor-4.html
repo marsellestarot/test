@@ -283,7 +283,31 @@
     const wasmURL = await fetchBlobURLWithProgress(`${baseURL}/ffmpeg-core.wasm`, "application/wasm", "Motor (WASM)", 2, 3, updateEngineUI);
     const workerURL = await fetchBlobURLWithProgress(`${ffmpegPkgURL}/worker.js`, "text/javascript", "Worker", 3, 3, updateEngineUI);
     els.engineStatus.textContent = "Iniciando motor...";
-    await ffmpeg.load({ coreURL, wasmURL, classWorkerURL: workerURL });
+    logLine("Descargas OK. Llamando a ffmpeg.load()...");
+
+    // ffmpeg.wasm es conocido por colgarse en silencio (sin error) si el
+    // Worker interno falla en ciertos navegadores/WebViews. Le ponemos un
+    // timeout para que, si eso pasa, al menos se muestre un error claro
+    // en vez de quedarse cargando para siempre.
+    function withTimeout(promise, ms, label){
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(
+          `Tiempo de espera agotado (${Math.round(ms/1000)}s) esperando: ${label}. ` +
+          `Esto suele pasar cuando el navegador/WebView bloquea los Web Workers necesarios ` +
+          `para ffmpeg.wasm. Probá abrir esta misma página en Chrome del celular (fuera de la app) ` +
+          `para confirmar si ahí funciona.`
+        )), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
+    try{
+      await withTimeout(ffmpeg.load({ coreURL, wasmURL, classWorkerURL: workerURL }), 25000, "carga del motor (ffmpeg.load)");
+    }catch(loadErr){
+      logLine("❌ ffmpeg.load() falló o expiró: " + (loadErr && loadErr.message ? loadErr.message : loadErr));
+      throw loadErr;
+    }
     els.engineStatus.textContent = "✅ Motor cargado";
     setTimeout(() => { els.engineWrap.classList.remove("show"); els.engineStatus.style.display = "none"; }, 1200);
     state.ffmpeg = ffmpeg;
@@ -388,162 +412,4 @@
     }catch(err){
       console.error(err);
       let msg = "No se pudo transcribir el audio.\n\n" + (err && err.message ? err.message : err);
-      msg += "\n\nSi el error es de red/CORS, puede que api.x.ai esté bloqueando llamadas directas desde el navegador — en ese caso hace falta un pequeño backend intermediario (proxy) para reenviar la petición.";
-      alert(msg);
-    }finally{
-      els.btnTranscribe.disabled = false;
-      els.sttWrap.classList.remove("show");
-    }
-  });
-
-  els.btnDownloadTxt.addEventListener("click", () => {
-    if(!state.transcript) return;
-    downloadBlob(new Blob([state.transcript.text||""], {type:"text/plain;charset=utf-8"}), "transcripcion.txt");
-  });
-  els.btnDownloadSrt.addEventListener("click", () => {
-    if(!state.sourceSegments) return;
-    downloadBlob(new Blob([generateSRT(state.sourceSegments)], {type:"text/plain;charset=utf-8"}), "transcripcion.srt");
-  });
-
-  // ---------- Segmentación para SRT ----------
-  function buildSegments(words){
-    if(!words || !words.length) return [];
-    const segments = [];
-    const MAX_WORDS = 12, MAX_DUR = 6.0;
-    let current = null;
-    words.forEach(w => {
-      if(!current){
-        current = { words: [w], start: w.start, end: w.end };
-      }else{
-        const dur = w.end - current.start;
-        const lastText = current.words[current.words.length-1].text || "";
-        const endsSentence = /[.!?…]$/.test(lastText.trim());
-        if(current.words.length >= MAX_WORDS || dur > MAX_DUR || endsSentence){
-          segments.push(current);
-          current = { words: [w], start: w.start, end: w.end };
-        }else{
-          current.words.push(w);
-          current.end = w.end;
-        }
-      }
-    });
-    if(current) segments.push(current);
-    return segments.map((s,i) => ({
-      index: i+1, start: s.start, end: s.end,
-      text: s.words.map(x => x.text).join(" ").trim()
-    }));
-  }
-  function srtTimestamp(t){
-    const pad = (n,l) => String(Math.max(0,Math.floor(n))).padStart(l,"0");
-    const h = Math.floor(t/3600);
-    const m = Math.floor((t%3600)/60);
-    const s = Math.floor(t%60);
-    const ms = Math.round((t - Math.floor(t)) * 1000);
-    return `${pad(h,2)}:${pad(m,2)}:${pad(s,2)},${String(ms).padStart(3,"0")}`;
-  }
-  function generateSRT(segments){
-    return segments.map(s =>
-      `${s.index}\n${srtTimestamp(s.start)} --> ${srtTimestamp(s.end)}\n${s.text}\n`
-    ).join("\n");
-  }
-
-  // ---------- Paso 4: traducción con Grok (chat completions) ----------
-  async function chatComplete(apiKey, model, systemMsg, userMsg){
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemMsg },
-          { role: "user", content: userMsg }
-        ],
-        temperature: 0.2
-      })
-    });
-    if(!res.ok){
-      const t = await res.text().catch(()=>"");
-      throw new Error("HTTP " + res.status + " " + t.slice(0,200));
-    }
-    const data = await res.json();
-    return data.choices[0].message.content.trim();
-  }
-  function parseJsonArray(raw){
-    let s = raw.trim();
-    s = s.replace(/^```json/i,"").replace(/^```/,"").replace(/```$/,"").trim();
-    return JSON.parse(s);
-  }
-
-  async function translateSegments(apiKey, model, segments){
-    const batches = [];
-    let batch = [], chars = 0;
-    segments.forEach(seg => {
-      batch.push(seg);
-      chars += seg.text.length;
-      if(batch.length >= 40 || chars > 4000){ batches.push(batch); batch = []; chars = 0; }
-    });
-    if(batch.length) batches.push(batch);
-
-    const out = [];
-    for(let i=0; i<batches.length; i++){
-      const b = batches[i];
-      const texts = b.map(s => s.text);
-      const sys = "Sos un traductor profesional. Traducís cada elemento del array JSON dado al español rioplatense, manteniendo exactamente el mismo orden y la misma cantidad de elementos (uno a uno). Devolvé ÚNICAMENTE un array JSON válido de strings, sin explicaciones, sin comentarios y sin bloques de código markdown.";
-      const content = await chatComplete(apiKey, model, sys, JSON.stringify(texts));
-      let arr;
-      try{ arr = parseJsonArray(content); }
-      catch(e){ throw new Error("La IA no devolvió un JSON válido al traducir los subtítulos."); }
-      arr.forEach((t, j) => out.push({ ...b[j], text: String(t) }));
-      els.trProgressBar.style.width = Math.round(((i+1)/batches.length)*100) + "%";
-    }
-    return out;
-  }
-
-  async function translateFullText(apiKey, model, text){
-    const sys = "Sos un traductor profesional. Traducí el siguiente texto al español rioplatense, de forma natural y fluida, conservando el sentido completo. Devolvé únicamente la traducción, sin comentarios adicionales.";
-    return await chatComplete(apiKey, model, sys, text);
-  }
-
-  els.btnTranslate.addEventListener("click", async () => {
-    const apiKey = requireApiKey();
-    if(!apiKey || !state.transcript) return;
-    const model = els.chatModel.value;
-    els.btnTranslate.disabled = true;
-    els.trWrap.classList.add("show");
-    els.trProgressBar.style.width = "5%";
-    try{
-      const [fullTranslated, segTranslated] = await Promise.all([
-        translateFullText(apiKey, model, state.transcript.text || ""),
-        (state.sourceSegments && state.sourceSegments.length)
-          ? translateSegments(apiKey, model, state.sourceSegments)
-          : Promise.resolve(null)
-      ]);
-      state.translatedText = fullTranslated;
-      state.translatedSegments = segTranslated;
-
-      els.translationText.value = fullTranslated;
-      enableCard(els.translationCard);
-      els.btnDownloadTxtEs.disabled = false;
-      els.btnDownloadSrtEs.disabled = !segTranslated;
-    }catch(err){
-      console.error(err);
-      alert("No se pudo traducir: " + (err && err.message ? err.message : err));
-    }finally{
-      els.btnTranslate.disabled = false;
-      els.trWrap.classList.remove("show");
-    }
-  });
-
-  els.btnDownloadTxtEs.addEventListener("click", () => {
-    if(!state.translatedText) return;
-    downloadBlob(new Blob([state.translatedText], {type:"text/plain;charset=utf-8"}), "traduccion_es.txt");
-  });
-  els.btnDownloadSrtEs.addEventListener("click", () => {
-    if(!state.translatedSegments) return;
-    downloadBlob(new Blob([generateSRT(state.translatedSegments)], {type:"text/plain;charset=utf-8"}), "traduccion_es.srt");
-  });
-
-})();
-</script>
-</body>
-</html>
+      msg += "\n\nSi el error es de red/CORS, puede que api.x.ai esté bloqueando llamadas directas desde el navegador — en ese caso hace falta un pequeño backend intermediario (proxy) para reen

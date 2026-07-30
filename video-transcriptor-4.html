@@ -37,12 +37,11 @@
 <body>
 <div class="container">
     <h1>🎙️ Subtitulador automático <span class="badge">con compresión</span></h1>
-    <p>Sube un vídeo o audio. El audio se comprime automáticamente a <strong>16 kHz mono</strong> para evitar errores de tamaño.<br>
+    <p>Sube un vídeo o audio. Se comprime a <strong>16 kHz mono</strong> y se transcribe con Groq Whisper (verbose_json).<br>
     <strong>Fallback:</strong> si Gemini falla por límite, puedes ingresar otra clave o usar LibreTranslate.</p>
 
     <div class="info-box">
         ✅ <strong>Claves preconfiguradas:</strong> Groq (transcripción) y Gemini (traducción) – no necesitas introducir nada.
-        Si alguna falla por cuota, te avisaremos y podrás cambiarla.
     </div>
 
     <form id="upload-form">
@@ -94,10 +93,10 @@
 
 <script>
 // ============================================================
-//  CLAVES PREDEFINIDAS (incrustadas en el código)
+//  CLAVES PREDEFINIDAS
 // ============================================================
 const GROQ_API_KEY = "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";
-let GEMINI_API_KEY = "AQ.Ab8RN6IGEoKGTTt-FB4lJvP51sjrwgRoq8yMbRfVOq1Q7aRfRw"; // se puede actualizar
+let GEMINI_API_KEY = "AQ.Ab8RN6IGEoKGTTt-FB4lJvP51sjrwgRoq8yMbRfVOq1Q7aRfRw";
 
 // ============================================================
 //  CONSTANTES DE API
@@ -113,10 +112,8 @@ let isProcessing = false;
 let currentSRT = "";
 
 // ============================================================
-//  FUNCIONES DE AUDIO (con compresión a 16 kHz mono)
+//  FUNCIONES DE AUDIO (compresión a 16 kHz mono)
 // ============================================================
-
-// Extrae el audio del archivo usando Web Audio API
 async function extractAudioFromFile(file) {
     const arrayBuffer = await file.arrayBuffer();
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -128,46 +125,35 @@ async function extractAudioFromFile(file) {
     }
 }
 
-// Remuestrea el audio a la frecuencia y número de canales deseados
 async function resampleAudioBuffer(audioBuffer, targetSampleRate = 16000, targetChannels = 1) {
     const originalSampleRate = audioBuffer.sampleRate;
     const originalChannels = audioBuffer.numberOfChannels;
 
-    // Si ya está en 16 kHz mono, devolvemos el mismo buffer
     if (originalSampleRate === targetSampleRate && originalChannels === targetChannels) {
         return audioBuffer;
     }
 
-    // Creamos un OfflineAudioContext con la configuración deseada
     const duration = audioBuffer.duration;
     const offlineCtx = new OfflineAudioContext(targetChannels, duration * targetSampleRate, targetSampleRate);
-
-    // Creamos una fuente con el buffer original
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
-
-    // Conectamos la fuente al destino (para que el offline context procese)
     source.connect(offlineCtx.destination);
-
-    // Iniciamos el renderizado
     source.start();
     const renderedBuffer = await offlineCtx.startRendering();
     return renderedBuffer;
 }
 
-// Convierte un AudioBuffer a un Blob WAV (PCM 16-bit)
 function createWavBlob(audioBuffer) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
-    const length = audioBuffer.length * numChannels * 2; // 16-bit
+    const length = audioBuffer.length * numChannels * 2;
     const buffer = new ArrayBuffer(44 + length);
     const view = new DataView(buffer);
 
-    // Cabecera WAV
-    view.setUint32(0, 0x46464952, true); // "RIFF"
+    view.setUint32(0, 0x46464952, true);
     view.setUint32(4, 36 + length, true);
-    view.setUint32(8, 0x45564157, true); // "WAVE"
-    view.setUint32(12, 0x20746d66, true); // "fmt "
+    view.setUint32(8, 0x45564157, true);
+    view.setUint32(12, 0x20746d66, true);
     view.setUint32(16, 16, true);
     view.setUint16(20, 1, true);
     view.setUint16(22, numChannels, true);
@@ -175,7 +161,7 @@ function createWavBlob(audioBuffer) {
     view.setUint32(28, sampleRate * numChannels * 2, true);
     view.setUint16(32, numChannels * 2, true);
     view.setUint16(34, 16, true);
-    view.setUint32(36, 0x61746164, true); // "data"
+    view.setUint32(36, 0x61746164, true);
     view.setUint32(40, length, true);
 
     let offset = 44;
@@ -191,13 +177,13 @@ function createWavBlob(audioBuffer) {
 }
 
 // ============================================================
-//  TRANSCRIPCIÓN CON GROQ WHISPER
+//  TRANSCRIPCIÓN CON GROQ WHISPER (verbose_json)
 // ============================================================
 async function transcribeWithGroq(audioBlob) {
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.wav');
     formData.append('model', 'whisper-large-v3');
-    formData.append('response_format', 'srt');
+    formData.append('response_format', 'verbose_json');  // <--- CAMBIADO
     formData.append('language', 'es');
 
     const response = await fetch(GROQ_WHISPER_URL, {
@@ -212,28 +198,40 @@ async function transcribeWithGroq(audioBlob) {
         const errText = await response.text();
         throw new Error(`Groq Whisper error (${response.status}): ${errText}`);
     }
-    return await response.text();
-}
+    const data = await response.json();
 
-// ============================================================
-//  PARSEO DE SRT
-// ============================================================
-function parseSRT(srtText) {
-    const blocks = [];
-    const entries = srtText.trim().split(/\n\s*\n/);
-    for (const entry of entries) {
-        const lines = entry.split('\n');
-        if (lines.length < 3) continue;
-        const idx = parseInt(lines[0].trim());
-        const timecode = lines[1].trim();
-        const text = lines.slice(2).join(' ').trim();
-        blocks.push({ idx, timecode, text });
+    // data.segments contiene los segmentos con start, end y text
+    if (!data.segments || data.segments.length === 0) {
+        throw new Error('La transcripción no devolvió segmentos.');
     }
-    return blocks;
+    return data.segments;
 }
 
 // ============================================================
-//  TRADUCCIÓN CON GEMINI
+//  CONVERSIÓN DE SEGMENTOS A SRT
+// ============================================================
+function segmentsToSRT(segments) {
+    function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.round((seconds - Math.floor(seconds)) * 1000);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+    }
+
+    let srt = '';
+    segments.forEach((seg, idx) => {
+        const start = formatTime(seg.start);
+        const end = formatTime(seg.end);
+        const text = seg.text.trim();
+        if (text === '') return;
+        srt += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
+    });
+    return srt;
+}
+
+// ============================================================
+//  TRADUCCIÓN CON GEMINI Y FALLBACK
 // ============================================================
 async function translateWithGemini(text, targetLang, apiKey) {
     const prompt = `Traduce el siguiente texto al idioma "${targetLang}". Devuelve solo la traducción, sin explicaciones ni comillas:\n\n${text}`;
@@ -264,9 +262,6 @@ async function translateWithGemini(text, targetLang, apiKey) {
     return textPart.trim();
 }
 
-// ============================================================
-//  TRADUCCIÓN CON LIBRETRANSLATE (FALLBACK)
-// ============================================================
 async function translateWithLibreTranslate(text, targetLang) {
     const response = await fetch(LIBRETRANSLATE_URL, {
         method: 'POST',
@@ -285,9 +280,6 @@ async function translateWithLibreTranslate(text, targetLang) {
     return data.translatedText.trim();
 }
 
-// ============================================================
-//  ORQUESTADOR DE TRADUCCIÓN CON FALLBACK
-// ============================================================
 async function translateWithFallback(text, targetLang, geminiKey) {
     try {
         return await translateWithGemini(text, targetLang, geminiKey);
@@ -305,7 +297,7 @@ async function translateWithFallback(text, targetLang, geminiKey) {
 }
 
 // ============================================================
-//  PROCESO PRINCIPAL (con compresión automática)
+//  PROCESO PRINCIPAL
 // ============================================================
 async function processFile(file, targetLang) {
     const progress = document.getElementById('progress');
@@ -318,15 +310,12 @@ async function processFile(file, targetLang) {
         fallbackBox.style.display = 'none';
         errorDiv.style.display = 'none';
 
-        // 1. Extraer audio
         progress.textContent = '🎵 Extrayendo audio del archivo...';
         const audioBuffer = await extractAudioFromFile(file);
 
-        // 2. Comprimir a 16 kHz mono (si no lo está ya)
         progress.textContent = '🔄 Comprimiendo audio a 16 kHz mono...';
         const compressedBuffer = await resampleAudioBuffer(audioBuffer, 16000, 1);
 
-        // 3. Generar WAV y verificar tamaño
         const wavBlob = createWavBlob(compressedBuffer);
         const sizeMB = wavBlob.size / (1024 * 1024);
         if (sizeMB > 24) {
@@ -334,37 +323,34 @@ async function processFile(file, targetLang) {
         }
         progress.textContent = `✅ Audio comprimido (${sizeMB.toFixed(2)} MB)`;
 
-        // 4. Transcribir con Groq Whisper
-        progress.textContent = '📝 Transcribiendo con Groq Whisper (puede tomar varios segundos)...';
-        const srtText = await transcribeWithGroq(wavBlob);
-        const blocks = parseSRT(srtText);
-        if (blocks.length === 0) throw new Error('No se obtuvo ninguna transcripción');
+        progress.textContent = '📝 Transcribiendo con Groq Whisper (verbose_json)...';
+        const segments = await transcribeWithGroq(wavBlob);
 
-        // 5. Traducir cada bloque
-        progress.textContent = `🌐 Traduciendo ${blocks.length} bloques... (Gemini + fallback)`;
-        const translatedBlocks = [];
-        for (let i = 0; i < blocks.length; i++) {
-            const block = blocks[i];
-            if (block.text.trim() === '') {
-                translatedBlocks.push({ ...block, text: '' });
+        // Generar SRT original (sin traducir) para mostrar
+        const srtOriginal = segmentsToSRT(segments);
+        if (!srtOriginal) throw new Error('No se generó SRT.');
+
+        progress.textContent = `🌐 Traduciendo ${segments.length} bloques...`;
+        const translatedSegments = [];
+        for (let i = 0; i < segments.length; i++) {
+            const seg = segments[i];
+            const text = seg.text.trim();
+            if (text === '') {
+                translatedSegments.push({ ...seg, text: '' });
                 continue;
             }
             let translatedText;
             try {
-                translatedText = await translateWithFallback(block.text, targetLang, GEMINI_API_KEY);
+                translatedText = await translateWithFallback(text, targetLang, GEMINI_API_KEY);
             } catch (err) {
                 if (err.message === 'QUOTA_EXCEEDED') throw err;
-                translatedText = block.text; // si falla todo, conservamos original
+                translatedText = text;
             }
-            translatedBlocks.push({ idx: block.idx, timecode: block.timecode, text: translatedText });
+            translatedSegments.push({ ...seg, text: translatedText });
             if (i % 3 === 0) await new Promise(r => setTimeout(r, 200));
         }
 
-        // 6. Generar SRT final
-        let finalSRT = '';
-        for (const b of translatedBlocks) {
-            finalSRT += `${b.idx}\n${b.timecode}\n${b.text}\n\n`;
-        }
+        const finalSRT = segmentsToSRT(translatedSegments);
         currentSRT = finalSRT;
 
         srtOutput.textContent = finalSRT;
@@ -385,7 +371,7 @@ async function processFile(file, targetLang) {
 }
 
 // ============================================================
-//  EVENTOS UI
+//  EVENTOS UI (igual que antes)
 // ============================================================
 document.getElementById('upload-form').addEventListener('submit', async function(e) {
     e.preventDefault();

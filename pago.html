@@ -413,225 +413,73 @@
             box.innerHTML = msg;
         }
 
+        const products = [
+            { id: 'cruz', desc: 'Cruz Celta - Marselles Tarot', value: '37.50' },
+            { id: 'rueda', desc: 'Rueda Anual - Marselles Tarot', value: '50.00' },
+            { id: 'carta', desc: 'Una Carta - Marselles Tarot', value: '22.90' }
+        ];
+
+        function makeConfig(product, extra) {
+            return Object.assign({
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: product.desc,
+                            amount: { currency_code: 'USD', value: product.value }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(product.id, err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            }, extra);
+        }
+
+        function setupProduct(product) {
+            // Botón PayPal
+            try {
+                paypal.Buttons(makeConfig(product, {
+                    style: { layout: 'horizontal', color: 'gold', shape: 'pill', label: 'pay', height: 25, tagline: false }
+                })).render('#paypal-button-' + product.id).catch(function(err) {
+                    console.error('Render error (' + product.id + ' paypal):', err);
+                });
+            } catch (err) {
+                console.error('Setup error (' + product.id + ' paypal):', err);
+            }
+
+            // Botón Tarjeta (sin cuenta PayPal)
+            try {
+                const cardButton = paypal.Buttons(makeConfig(product, {
+                    fundingSource: paypal.FUNDING.CARD,
+                    style: { layout: 'horizontal', color: 'gold', shape: 'pill', height: 25 }
+                }));
+                const container = document.getElementById('card-button-' + product.id);
+                if (cardButton.isEligible()) {
+                    cardButton.render(container).catch(function(err) {
+                        console.error('Render error (' + product.id + ' card):', err);
+                        if (container.previousElementSibling) container.previousElementSibling.style.display = 'none';
+                    });
+                } else {
+                    if (container.previousElementSibling) container.previousElementSibling.style.display = 'none';
+                }
+            } catch (err) {
+                console.error('Setup error (' + product.id + ' card):', err);
+                const container = document.getElementById('card-button-' + product.id);
+                if (container && container.previousElementSibling) container.previousElementSibling.style.display = 'none';
+            }
+        }
+
         if (typeof paypal === 'undefined') {
             showError('No se pudo cargar PayPal. Revisa tu conexión o prueba en otro navegador.');
         } else {
-            // Cruz Celta
-            paypal.Buttons({
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    label: 'pay',
-                    height: 25,
-                    tagline: false
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Cruz Celta - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '37.50'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            }).render('#paypal-button-cruz').catch(function(err) {
-                console.error('Render error (Cruz):', err);
-                showError('No se pudo mostrar el botón de pago. Probá abriendo esta página desde una URL http:// o https:// real (PayPal no funciona sobre content:// o file://).');
-            });
-
-            // Cruz Celta - Tarjeta (sin cuenta PayPal)
-            const cardCruz = paypal.Buttons({
-                fundingSource: paypal.FUNDING.CARD,
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    height: 25
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Cruz Celta - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '37.50'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            });
-            if (cardCruz.isEligible()) {
-                cardCruz.render('#card-button-cruz').catch(function(err) { console.error('Render error (card Cruz):', err); });
-            } else {
-                document.getElementById('card-button-cruz').previousElementSibling.style.display = 'none';
-            }
-
-            // Rueda Anual
-            paypal.Buttons({
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    label: 'pay',
-                    height: 25,
-                    tagline: false
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Rueda Anual - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '50.00'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            }).render('#paypal-button-rueda').catch(function(err) {
-                console.error('Render error (Rueda):', err);
-            });
-
-            // Rueda Anual - Tarjeta (sin cuenta PayPal)
-            const cardRueda = paypal.Buttons({
-                fundingSource: paypal.FUNDING.CARD,
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    height: 25
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Rueda Anual - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '50.00'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            });
-            if (cardRueda.isEligible()) {
-                cardRueda.render('#card-button-rueda').catch(function(err) { console.error('Render error (card Rueda):', err); });
-            } else {
-                document.getElementById('card-button-rueda').previousElementSibling.style.display = 'none';
-            }
-
-            // Una Carta
-            paypal.Buttons({
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    label: 'pay',
-                    height: 25,
-                    tagline: false
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Una Carta - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '22.90'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            }).render('#paypal-button-carta').catch(function(err) {
-                console.error('Render error (Carta):', err);
-            });
-
-            // Una Carta - Tarjeta (sin cuenta PayPal)
-            const cardCarta = paypal.Buttons({
-                fundingSource: paypal.FUNDING.CARD,
-                style: {
-                    layout: 'horizontal',
-                    color: 'gold',
-                    shape: 'pill',
-                    height: 25
-                },
-                createOrder: function(data, actions) {
-                    return actions.order.create({
-                        intent: 'CAPTURE',
-                        purchase_units: [{
-                            description: 'Una Carta - Marselles Tarot',
-                            amount: {
-                                currency_code: 'USD',
-                                value: '22.90'
-                            }
-                        }]
-                    });
-                },
-                onApprove: function(data, actions) {
-                    return actions.order.capture().then(function() {
-                        window.location.href = 'https://ig.me/m/marselles.tarot';
-                    });
-                },
-                onError: function(err) {
-                    console.error(err);
-                    showError('Hubo un problema con el pago. Intenta nuevamente.');
-                }
-            });
-            if (cardCarta.isEligible()) {
-                cardCarta.render('#card-button-carta').catch(function(err) { console.error('Render error (card Carta):', err); });
-            } else {
-                document.getElementById('card-button-carta').previousElementSibling.style.display = 'none';
-            }
+            products.forEach(setupProduct);
         }
     </script>
 </body>

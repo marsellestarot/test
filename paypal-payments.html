@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elige tu tirada</title>
+    <script src="https://www.paypal.com/sdk/js?client-id=AY2suIRr0KSYHhhphjv8X8j-dhrZTbaBsLEK_7iCQfESKnMf9XwEdZMYoYrhDFItNFGWMPTupyXzvoP7&currency=USD&intent=capture"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f172a;
+            min-height: 100vh;
+            color: #f1f5f9;
+            padding: 32px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            max-width: 420px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+        
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 10px;
+            line-height: 1.3;
+        }
+        
+        .subtitle {
+            font-size: 1rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        
+        .cards {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 24px 20px;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+        
+        .product-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        
+        .price {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        
+        .price-note {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 18px;
+        }
+        
+        .paypal-button-container {
+            min-height: 48px;
+        }
+        
+        .error-msg {
+            display: none;
+            background: #450a0a;
+            border: 1px solid #7f1d1d;
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            margin-top: 20px;
+            text-align: center;
+            line-height: 1.4;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Elige tu tirada</h1>
+            <p class="subtitle">Serás redirigido al chat con la tarotista</p>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <div class="card-header">
+                    <span class="product-name">Cruz Celta</span>
+                    <span class="price">$37.50</span>
+                </div>
+                <div class="price-note">USD</div>
+                <div id="paypal-button-cruz" class="paypal-button-container"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="product-name">Rueda Anual</span>
+                    <span class="price">$50</span>
+                </div>
+                <div class="price-note">USD</div>
+                <div id="paypal-button-rueda" class="paypal-button-container"></div>
+            </div>
+        </div>
+
+        <div id="error-box" class="error-msg"></div>
+
+        <div class="footer">
+            <p>Pago seguro con PayPal</p>
+        </div>
+    </div>
+
+    <script>
+        function showError(msg) {
+            const box = document.getElementById('error-box');
+            box.style.display = 'block';
+            box.innerHTML = msg;
+        }
+
+        // Verifica que el SDK de PayPal haya cargado
+        if (typeof paypal === 'undefined') {
+            showError('No se pudo cargar PayPal. Revisa tu conexión a internet o prueba en otro navegador.');
+        } else {
+            // Botón Cruz Celta
+            paypal.Buttons({
+                style: {
+                    layout: 'vertical',
+                    color: 'gold',
+                    shape: 'rect',
+                    label: 'pay',
+                    height: 48
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Cruz Celta',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '37.50'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function(details) {
+                        alert('Pago recibido. Pronto serás contactada por la tarotista.');
+                        // Aquí puedes redirigir al chat si tienes el link
+                        // window.location.href = 'https://tu-link-de-chat.com';
+                    });
+                },
+                onError: function(err) {
+                    console.error('PayPal error:', err);
+                    showError('Error al procesar el pago. Verifica que tu cuenta de PayPal esté activa para recibir pagos.');
+                },
+                onCancel: function() {
+                    // El usuario canceló, no hacemos nada
+                }
+            }).render('#paypal-button-cruz').catch(function(err) {
+                console.error(err);
+                showError('No se pudo mostrar el botón de Cruz Celta. Client ID inválido o cuenta no configurada.');
+            });
+
+            // Botón Rueda Anual
+            paypal.Buttons({
+                style: {
+                    layout: 'vertical',
+                    color: 'gold',
+                    shape: 'rect',
+                    label: 'pay',
+                    height: 48
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Rueda Anual',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '50.00'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function(details) {
+                        alert('Pago recibido. Pronto serás contactada por la tarotista.');
+                    });
+                },
+                onError: function(err) {
+                    console.error('PayPal error:', err);
+                    showError('Error al procesar el pago. Verifica que tu cuenta de PayPal esté activa para recibir pagos.');
+                }
+            }).render('#paypal-button-rueda').catch(function(err) {
+                console.error(err);
+                showError('No se pudo mostrar el botón de Rueda Anual.');
+            });
+        }
+    </script>
+</body>
+</html>

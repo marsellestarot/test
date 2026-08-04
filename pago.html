@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elige tu tirada · Marselles Tarot</title>
+    <script src="https://www.paypal.com/sdk/js?client-id=AY2suIRr0KSYHhhphjv8X8j-dhrZTbaBsLEK_7iCQfESKnMf9XwEdZMYoYrhDFItNFGWMPTupyXzvoP7&currency=USD&intent=capture"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f1729;
+            min-height: 100vh;
+            color: #e7e5e4;
+            padding: 10px 14px 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Atmospheric smoke layer */
+        .smoke {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .smoke-layer {
+            position: absolute;
+            width: 140%;
+            height: 140%;
+            top: -20%;
+            left: -20%;
+            background: 
+                radial-gradient(ellipse 60% 50% at 30% 40%, rgba(60, 90, 200, 0.10) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 60% at 70% 60%, rgba(45, 70, 180, 0.09) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 40% at 50% 30%, rgba(80, 110, 220, 0.07) 0%, transparent 70%);
+            animation: smokeDrift 18s ease-in-out infinite alternate;
+            will-change: transform;
+        }
+
+        .smoke-layer-2 {
+            position: absolute;
+            width: 130%;
+            height: 130%;
+            top: -15%;
+            left: -15%;
+            background: 
+                radial-gradient(ellipse 55% 45% at 60% 50%, rgba(232, 139, 160, 0.05) 0%, transparent 65%),
+                radial-gradient(ellipse 45% 55% at 25% 70%, rgba(70, 95, 210, 0.06) 0%, transparent 65%);
+            animation: smokeDrift2 22s ease-in-out infinite alternate;
+            will-change: transform;
+        }
+
+        @keyframes smokeDrift {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(12px, -8px) scale(1.03); }
+        }
+
+        @keyframes smokeDrift2 {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(-10px, 6px) scale(1.02); }
+        }
+
+        /* Micro-parallax background */
+        .bg-parallax {
+            position: fixed;
+            inset: -30px;
+            background: #0f1729;
+            z-index: -1;
+            will-change: transform;
+        }
+
+        .container {
+            max-width: 400px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .brand {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.92rem;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: #8b96b3;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .divider {
+            width: 36px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #3d4863, transparent);
+            margin: 0 auto 13px;
+        }
+
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.05rem;
+            font-weight: 600;
+            color: #fafaf9;
+            line-height: 1.15;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 0.94rem;
+            color: #8b96b3;
+            line-height: 1.4;
+            max-width: 310px;
+            margin: 0 auto;
+        }
+
+        .countries {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        .country {
+            font-size: 0.68rem;
+            color: #8b96b3;
+            background: rgba(24, 34, 56, 0.7);
+            border: 1px solid #2a3654;
+            padding: 3px 9px;
+            border-radius: 20px;
+            letter-spacing: 0.02em;
+        }
+
+        /* Cards */
+        .cards {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .card {
+            background: #182238;
+            border: 1px solid #2a3654;
+            border-radius: 16px;
+            padding: 9px 12px 7px;
+            transition: border-color 0.4s ease, background 0.4s ease, box-shadow 0.4s ease;
+            position: relative;
+        }
+
+        /* Cruz Celta - preferred */
+        .card-preferred {
+            transform: scale(1.02);
+            background: #1e2a45;
+            border: 1px solid rgba(242, 181, 68, 0.45);
+            box-shadow: 
+                0 12px 40px rgba(0, 0, 0, 0.35),
+                0 4px 16px rgba(0, 0, 0, 0.2),
+                0 0 0 1px rgba(139, 123, 102, 0.08);
+            z-index: 2;
+            margin-bottom: 2px;
+        }
+
+        .card-secondary {
+            opacity: 0.92;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.68rem;
+            letter-spacing: 0.06em;
+            color: #f2b544;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2px;
+        }
+
+        .product-name {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.18rem;
+            font-weight: 600;
+            color: #f0eef5;
+            letter-spacing: 0.01em;
+        }
+
+        .price {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #cdd3e6;
+            letter-spacing: 0.02em;
+        }
+
+        .price span {
+            font-size: 0.74rem;
+            font-weight: 500;
+            color: #6b7694;
+            margin-left: 2px;
+        }
+
+        /* Slightly higher contrast for preferred price */
+        .card-preferred .price {
+            color: #f5eef1;
+        }
+
+        .card-preferred .price span {
+            color: #b7c0dc;
+        }
+
+        .description {
+            font-size: 0.8rem;
+            color: #78716c;
+            margin-bottom: 9px;
+            line-height: 1.35;
+        }
+
+        .ideal-for {
+            font-size: 0.74rem;
+            color: #e88ba0;
+            margin-bottom: 4px;
+            line-height: 1.35;
+            font-style: italic;
+        }
+
+        .card-divider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.68rem;
+            color: #5c6690;
+            margin: 4px 0 3px;
+            text-align: center;
+        }
+
+        .card-divider::before,
+        .card-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #2a3654;
+        }
+
+        .paypal-button-container {
+            min-height: 26px;
+            position: relative;
+        }
+
+        /* Subtle living glow only on preferred button */
+        .preferred-button-wrap {
+            position: relative;
+        }
+
+        .preferred-button-wrap::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 6px;
+            background: radial-gradient(ellipse at center, rgba(242, 181, 68, 0.16) 0%, transparent 70%);
+            opacity: 0.4;
+            animation: softGlow 7s ease-in-out infinite alternate;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes softGlow {
+            0%   { opacity: 0.25; }
+            100% { opacity: 0.55; }
+        }
+
+        /* Trust */
+        .trust {
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #1c1917;
+        }
+
+        .trust-text {
+            font-size: 0.76rem;
+            color: #6b7694;
+            line-height: 1.45;
+        }
+
+        .trust-text strong {
+            color: #e88ba0;
+            font-weight: 500;
+        }
+
+        .error-msg {
+            display: none;
+            background: #1c0a0a;
+            border: 1px solid #450a0a;
+            color: #fca5a5;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 0.84rem;
+            margin-top: 18px;
+            text-align: center;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-parallax" id="parallax"></div>
+    <div class="smoke">
+        <div class="smoke-layer"></div>
+        <div class="smoke-layer-2"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="brand">Marselles Tarot</div>
+            <div class="divider"></div>
+            <h1>Elige tu tirada</h1>
+            <p class="subtitle">Al confirmar el pago, pasás directo al chat privado conmigo</p>
+            <div class="countries">
+                <span class="country">🇺🇸 USA</span>
+                <span class="country">🇵🇦 Panamá</span>
+                <span class="country">🇨🇱 Chile</span>
+                <span class="country">🇲🇽 México</span>
+                <span class="country">🇨🇴 Colombia</span>
+                <span class="country">🇪🇸 España</span>
+            </div>
+        </div>
+
+        <div class="cards">
+            <!-- Cruz Celta - preferred -->
+            <div class="card card-preferred">
+                <div class="badge">✦ Más elegida</div>
+                <div class="card-top">
+                    <span class="product-name">Cruz Celta</span>
+                    <span class="price">37.50<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para una situación puntual que necesitás resolver</p>
+                <div class="preferred-button-wrap">
+                    <div id="paypal-button-cruz" class="paypal-button-container"></div>
+                </div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-cruz" class="paypal-button-container"></div>
+            </div>
+
+            <!-- Rueda Anual -->
+            <div class="card card-secondary">
+                <div class="card-top">
+                    <span class="product-name">Rueda Anual</span>
+                    <span class="price">50<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para planificar decisiones a futuro</p>
+                <div id="paypal-button-rueda" class="paypal-button-container"></div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-rueda" class="paypal-button-container"></div>
+            </div>
+
+            <!-- Una Carta - entry option -->
+            <div class="card card-secondary">
+                <div class="card-top">
+                    <span class="product-name">Una Carta</span>
+                    <span class="price">22.90<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para probar antes de una lectura completa</p>
+                <div id="paypal-button-carta" class="paypal-button-container"></div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-carta" class="paypal-button-container"></div>
+            </div>
+        </div>
+
+        <div id="error-box" class="error-msg"></div>
+
+        <div class="trust">
+            <p class="trust-text">
+                Pago 100% seguro a través de PayPal<br>
+                <strong>Chat privado y personal conmigo</strong>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Micro-parallax
+        const parallax = document.getElementById('parallax');
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            parallax.style.transform = `translateY(${scrollY * 0.25}px)`;
+        }, { passive: true });
+
+        function showError(msg) {
+            const box = document.getElementById('error-box');
+            box.style.display = 'block';
+            box.innerHTML = msg;
+        }
+
+        if (typeof paypal === 'undefined') {
+            showError('No se pudo cargar PayPal. Revisa tu conexión o prueba en otro navegador.');
+        } else {
+            // Cruz Celta
+            paypal.Buttons({
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    label: 'pay',
+                    height: 25,
+                    tagline: false
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Cruz Celta - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '37.50'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            }).render('#paypal-button-cruz').catch(function(err) {
+                console.error('Render error (Cruz):', err);
+                showError('No se pudo mostrar el botón de pago. Probá abriendo esta página desde una URL http:// o https:// real (PayPal no funciona sobre content:// o file://).');
+            });
+
+            // Cruz Celta - Tarjeta (sin cuenta PayPal)
+            const cardCruz = paypal.Buttons({
+                fundingSource: paypal.FUNDING.CARD,
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    height: 25
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Cruz Celta - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '37.50'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            });
+            if (cardCruz.isEligible()) {
+                cardCruz.render('#card-button-cruz').catch(function(err) { console.error('Render error (card Cruz):', err); });
+            } else {
+                document.getElementById('card-button-cruz').previousElementSibling.style.display = 'none';
+            }
+
+            // Rueda Anual
+            paypal.Buttons({
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    label: 'pay',
+                    height: 25,
+                    tagline: false
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Rueda Anual - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '50.00'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            }).render('#paypal-button-rueda').catch(function(err) {
+                console.error('Render error (Rueda):', err);
+            });
+
+            // Rueda Anual - Tarjeta (sin cuenta PayPal)
+            const cardRueda = paypal.Buttons({
+                fundingSource: paypal.FUNDING.CARD,
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    height: 25
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Rueda Anual - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '50.00'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            });
+            if (cardRueda.isEligible()) {
+                cardRueda.render('#card-button-rueda').catch(function(err) { console.error('Render error (card Rueda):', err); });
+            } else {
+                document.getElementById('card-button-rueda').previousElementSibling.style.display = 'none';
+            }
+
+            // Una Carta
+            paypal.Buttons({
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    label: 'pay',
+                    height: 25,
+                    tagline: false
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Una Carta - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '22.90'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            }).render('#paypal-button-carta').catch(function(err) {
+                console.error('Render error (Carta):', err);
+            });
+
+            // Una Carta - Tarjeta (sin cuenta PayPal)
+            const cardCarta = paypal.Buttons({
+                fundingSource: paypal.FUNDING.CARD,
+                style: {
+                    layout: 'horizontal',
+                    color: 'gold',
+                    shape: 'pill',
+                    height: 25
+                },
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: 'Una Carta - Marselles Tarot',
+                            amount: {
+                                currency_code: 'USD',
+                                value: '22.90'
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            });
+            if (cardCarta.isEligible()) {
+                cardCarta.render('#card-button-carta').catch(function(err) { console.error('Render error (card Carta):', err); });
+            } else {
+                document.getElementById('card-button-carta').previousElementSibling.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elige tu tirada · Marselles Tarot</title>
+    <script src="https://www.paypal.com/sdk/js?client-id=AY2suIRr0KSYHhhphjv8X8j-dhrZTbaBsLEK_7iCQfESKnMf9XwEdZMYoYrhDFItNFGWMPTupyXzvoP7&currency=USD&intent=capture&components=buttons&disable-funding=credit,paylater"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500&display=swap');
+
+        :root {
+            /* Fondo profundo, negro lavado */
+            --bg: #0F0E0C;
+            /* Superficie de tarjetas — casi invisible */
+            --card: #161411;
+            /* Tarjeta destacada — apenas más clara */
+            --card-featured: #1C1914;
+            /* Texto principal — crema antiguo */
+            --text: #EDE6D9;
+            /* Texto secundario — crema ahumado */
+            --text-secondary: #A89F8E;
+            /* Precio */
+            --price: #E8DFD0;
+            /* Descripción / ideal-for */
+            --description: #B8A99A;
+            /* Oro apagado */
+            --accent: #C4A86A;
+            /* Líneas y bordes finos */
+            --border: rgba(196, 168, 106, 0.18);
+            --separator: rgba(196, 168, 106, 0.12);
+            /* Botón (se mantiene legible) */
+            --button: #6B7F5A;
+            --button-hover: #5C6E4C;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+            background: var(--bg);
+            min-height: 100vh;
+            color: var(--text);
+            padding: 28px 20px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow-x: hidden;
+            letter-spacing: 0.01em;
+        }
+
+        /* Capa atmosférica muy sutil — sin gradientes modernos llamativos */
+        .smoke {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+            opacity: 0.55;
+        }
+
+        .smoke-layer {
+            position: absolute;
+            width: 160%;
+            height: 160%;
+            top: -30%;
+            left: -30%;
+            background:
+                radial-gradient(ellipse 50% 40% at 25% 35%, rgba(40, 35, 25, 0.5) 0%, transparent 70%),
+                radial-gradient(ellipse 45% 50% at 75% 65%, rgba(30, 28, 22, 0.4) 0%, transparent 70%);
+            animation: smokeDrift 28s ease-in-out infinite alternate;
+        }
+
+        .smoke-layer-2 {
+            position: absolute;
+            width: 150%;
+            height: 150%;
+            top: -25%;
+            left: -25%;
+            background:
+                radial-gradient(ellipse 40% 35% at 55% 45%, rgba(50, 42, 30, 0.25) 0%, transparent 65%);
+            animation: smokeDrift2 34s ease-in-out infinite alternate;
+        }
+
+        @keyframes smokeDrift {
+            0%   { transform: translate(0, 0); }
+            100% { transform: translate(8px, -6px); }
+        }
+
+        @keyframes smokeDrift2 {
+            0%   { transform: translate(0, 0); }
+            100% { transform: translate(-6px, 5px); }
+        }
+
+        .container {
+            max-width: 380px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ───────── Header ───────── */
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+
+        .brand {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.78rem;
+            letter-spacing: 0.42em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+            font-weight: 500;
+        }
+
+        .divider {
+            width: 28px;
+            height: 1px;
+            background: var(--accent);
+            opacity: 0.55;
+            margin: 0 auto 22px;
+        }
+
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.35rem;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1.12;
+            margin-bottom: 12px;
+            letter-spacing: 0.02em;
+        }
+
+        .subtitle {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.05rem;
+            font-weight: 400;
+            font-style: italic;
+            color: var(--text-secondary);
+            line-height: 1.45;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        .countries {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px 10px;
+            margin-top: 22px;
+        }
+
+        .country {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.06em;
+            padding: 2px 0;
+            /* sin fondo ni border-radius — solo tipografía */
+        }
+
+        /* ───────── Cards ───────── */
+        .cards {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .card {
+            background: transparent;
+            border: none;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+            padding: 22px 4px 18px;
+            position: relative;
+            /* sin sombras, sin cajas */
+        }
+
+        /* Destacada: solo un toque de oro y un poco más de espacio */
+        .card-preferred {
+            border-top: 1px solid rgba(196, 168, 106, 0.35);
+            border-bottom: 1px solid rgba(196, 168, 106, 0.35);
+            padding-top: 26px;
+            padding-bottom: 22px;
+            background: transparent;
+            transform: none;
+            box-shadow: none;
+            z-index: 1;
+        }
+
+        .card-secondary {
+            opacity: 0.92;
+            box-shadow: none;
+        }
+
+        .badge {
+            display: block;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.7rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+
+        .product-name {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.45rem;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: 0.02em;
+        }
+
+        .price {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.15rem;
+            font-weight: 500;
+            color: var(--price);
+            letter-spacing: 0.03em;
+        }
+
+        .price span {
+            font-size: 0.78rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 3px;
+            letter-spacing: 0.08em;
+        }
+
+        .ideal-for {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.95rem;
+            font-style: italic;
+            font-weight: 400;
+            color: var(--description);
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .card-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.78rem;
+            font-style: italic;
+            color: var(--text-secondary);
+            margin: 14px 0 10px;
+            text-align: center;
+            letter-spacing: 0.02em;
+        }
+
+        .card-divider::before,
+        .card-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--separator);
+        }
+
+        .paypal-button-container {
+            min-height: 28px;
+            position: relative;
+        }
+
+        /* Sin glow moderno */
+        .preferred-button-wrap {
+            position: relative;
+        }
+
+        .preferred-button-wrap::after {
+            display: none;
+        }
+
+        /* ───────── Trust ───────── */
+        .trust {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 28px;
+            border-top: 1px solid var(--separator);
+        }
+
+        .trust-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+            letter-spacing: 0.01em;
+        }
+
+        .trust-text strong {
+            color: var(--description);
+            font-weight: 500;
+            font-style: italic;
+        }
+
+        .error-msg {
+            display: none;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 14px 16px;
+            border-radius: 0;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.95rem;
+            margin-top: 24px;
+            text-align: center;
+            line-height: 1.45;
+        }
+    </style>
+</head>
+<body>
+    <div class="smoke">
+        <div class="smoke-layer"></div>
+        <div class="smoke-layer-2"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="brand">Marselles Tarot</div>
+            <div class="divider"></div>
+            <h1>Elige tu tirada</h1>
+            <p class="subtitle">Al confirmar el pago, pasás directo al chat privado conmigo</p>
+            <div class="countries">
+                <span class="country">🇺🇸 USA</span>
+                <span class="country">🇵🇦 Panamá</span>
+                <span class="country">🇨🇱 Chile</span>
+                <span class="country">🇲🇽 México</span>
+                <span class="country">🇨🇴 Colombia</span>
+                <span class="country">🇪🇸 España</span>
+            </div>
+        </div>
+
+        <div class="cards">
+            <!-- Cruz Celta - preferred -->
+            <div class="card card-preferred">
+                <div class="badge">✦ Más elegida</div>
+                <div class="card-top">
+                    <span class="product-name">Cruz Celta</span>
+                    <span class="price">37.50<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para una situación puntual que necesitás resolver</p>
+                <div class="preferred-button-wrap">
+                    <div id="paypal-button-cruz" class="paypal-button-container"></div>
+                </div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-cruz" class="paypal-button-container"></div>
+            </div>
+
+            <!-- Rueda Anual -->
+            <div class="card card-secondary">
+                <div class="card-top">
+                    <span class="product-name">Rueda Anual</span>
+                    <span class="price">50<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para planificar decisiones a futuro</p>
+                <div id="paypal-button-rueda" class="paypal-button-container"></div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-rueda" class="paypal-button-container"></div>
+            </div>
+
+            <!-- Una Carta -->
+            <div class="card card-secondary">
+                <div class="card-top">
+                    <span class="product-name">Una Carta</span>
+                    <span class="price">22.90<span>USD</span></span>
+                </div>
+                <p class="ideal-for">Ideal para probar antes de una lectura completa</p>
+                <div id="paypal-button-carta" class="paypal-button-container"></div>
+                <p class="card-divider"><span>o pagá con tarjeta, sin cuenta PayPal</span></p>
+                <div id="card-button-carta" class="paypal-button-container"></div>
+            </div>
+        </div>
+
+        <div id="error-box" class="error-msg"></div>
+
+        <div class="trust">
+            <p class="trust-text">
+                Pago 100% seguro a través de PayPal<br>
+                <strong>Chat privado y personal conmigo</strong>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function showError(msg) {
+            const box = document.getElementById('error-box');
+            box.style.display = 'block';
+            box.innerHTML = msg;
+        }
+
+        const products = [
+            { id: 'cruz', desc: 'Cruz Celta - Marselles Tarot', value: '37.50' },
+            { id: 'rueda', desc: 'Rueda Anual - Marselles Tarot', value: '50.00' },
+            { id: 'carta', desc: 'Una Carta - Marselles Tarot', value: '22.90' }
+        ];
+
+        function makeConfig(product, extra) {
+            return Object.assign({
+                createOrder: function(data, actions) {
+                    return actions.order.create({
+                        intent: 'CAPTURE',
+                        purchase_units: [{
+                            description: product.desc,
+                            amount: { currency_code: 'USD', value: product.value }
+                        }]
+                    });
+                },
+                onApprove: function(data, actions) {
+                    return actions.order.capture().then(function() {
+                        window.location.href = 'https://ig.me/m/marselles.tarot';
+                    });
+                },
+                onError: function(err) {
+                    console.error(product.id, err);
+                    showError('Hubo un problema con el pago. Intenta nuevamente.');
+                }
+            }, extra);
+        }
+
+        function setupProduct(product) {
+            try {
+                paypal.Buttons(makeConfig(product, {
+                    style: { layout: 'horizontal', color: 'blue', shape: 'pill', label: 'pay', height: 35, tagline: false }
+                })).render('#paypal-button-' + product.id).catch(function(err) {
+                    console.error('Render error (' + product.id + ' paypal):', err);
+                });
+            } catch (err) {
+                console.error('Setup error (' + product.id + ' paypal):', err);
+            }
+
+            try {
+                const cardButton = paypal.Buttons(makeConfig(product, {
+                    fundingSource: paypal.FUNDING.CARD,
+                    style: { layout: 'horizontal', color: 'black', shape: 'pill', height: 35 }
+                }));
+                const container = document.getElementById('card-button-' + product.id);
+                cardButton.render(container).catch(function(err) {
+                    console.error('Render error (' + product.id + ' card):', err);
+                });
+            } catch (err) {
+                console.error('Setup error (' + product.id + ' card):', err);
+                const container = document.getElementById('card-button-' + product.id);
+                if (container && container.previousElementSibling) container.previousElementSibling.style.display = 'none';
+            }
+        }
+
+        if (typeof paypal === 'undefined') {
+            showError('No se pudo cargar PayPal. Revisa tu conexión o prueba en otro navegador.');
+        } else {
+            products.forEach(setupProduct);
+        }
+    </script>
+</body>
+</html>
